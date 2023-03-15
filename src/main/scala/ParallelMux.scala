@@ -67,6 +67,7 @@ object ParallelMux {
     val xs = in.map { case (cond, x) => (Fill(x.getWidth, cond) & x.asUInt()).asTypeOf(in.head._2) }
     ParallelOR(xs)
   }
+  def apply[T <: Data](sel: Seq[Bool], in: Seq[T]): T = apply(sel.zip(in))
 }
 
 object ParallelLookUp {
@@ -77,13 +78,13 @@ object ParallelLookUp {
 
 object ParallelMax {
   def apply[T <: Data](xs: Seq[T]): T = {
-    ParallelOperation(xs, (a: T, b: T) => Mux(a.asUInt() > b.asUInt(), a, b).asTypeOf(xs.head))
+    ParallelOperation(xs, (a: T, b:T) => Mux(a.asUInt > b.asUInt,a, b).asTypeOf(xs.head))
   }
 }
 
 object ParallelMin {
   def apply[T <: Data](xs: Seq[T]): T = {
-    ParallelOperation(xs, (a: T, b: T) => Mux(a.asUInt() < b.asUInt(), a, b).asTypeOf(xs.head))
+    ParallelOperation(xs, (a: T, b:T) => Mux(a.asUInt < b.asUInt,a, b).asTypeOf(xs.head))
   }
 }
 
@@ -91,15 +92,57 @@ object ParallelPriorityMux {
   def apply[T <: Data](in: Seq[(Bool, T)]): T = {
     ParallelOperation(in, (a: (Bool, T), b: (Bool, T)) => (a._1 || b._1, Mux(a._1, a._2, b._2)))._2
   }
-  def apply[T <: Data](sel: Bits, in:      Seq[T]): T = apply((0 until in.size).map(sel(_)), in)
+  def apply[T <: Data](sel: Bits, in:      Seq[T]): T = apply(in.indices.map(sel(_)), in)
   def apply[T <: Data](sel: Seq[Bool], in: Seq[T]): T = apply(sel.zip(in))
 }
 
 object ParallelPriorityEncoder {
-  def apply(in: Seq[Bool]): UInt = ParallelPriorityMux(in, (0 until in.size).map(_.asUInt))
+  def apply(in: Seq[Bool]): UInt = ParallelPriorityMux(in, in.indices.map(_.asUInt))
   def apply(in: Bits):      UInt = apply(in.asBools)
 }
 
 object ParallelSingedExpandingAdd {
   def apply(in: Seq[SInt]): SInt = ParallelOperation(in, (a: SInt, b: SInt) => a +& b)
+}
+
+class SelectTwoInterRes[T <: Data](gen: T) extends Bundle {
+  // val valid = Bool()
+  val hasOne = Bool()
+  val hasTwo = Bool()
+  val first = gen.cloneType
+  val second = gen.cloneType
+}
+
+object SelectTwoInterRes {
+  def apply[T <: Data](hasOne: Bool, hasTwo: Bool, first: T, second: T): SelectTwoInterRes[T] = {
+    val res = Wire(new SelectTwoInterRes(first))
+    res.hasOne := hasOne
+    res.hasTwo := hasTwo
+    res.first := first
+    res.second := second
+    res
+  }
+  def apply[T <: Data](valid: Bool, data: T): SelectTwoInterRes[T] = {
+    val res = apply(valid, false.B, data, data)
+    res
+  }
+}
+
+
+object ParallelSelectTwo {
+  def mergeSelectFirstTwo[T <: Data](a: SelectTwoInterRes[T], b: SelectTwoInterRes[T]): SelectTwoInterRes[T] = {
+    SelectTwoInterRes(
+      a.hasOne || b.hasOne,
+      a.hasTwo || b.hasTwo || a.hasOne && b.hasOne,
+      Mux(a.hasOne, a.first, b.first),
+      Mux1H(Seq(
+        (!a.hasOne, b.second),
+        (a.hasOne && !a.hasTwo, b.first),
+        (a.hasTwo, a.second)
+      ))
+    )
+  }
+  def apply[T <: Data](xs: Seq[SelectTwoInterRes[T]]): SelectTwoInterRes[T] = {
+    ParallelOperation(xs, mergeSelectFirstTwo[T])
+  }
 }
