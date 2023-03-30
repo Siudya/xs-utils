@@ -58,15 +58,26 @@ class CircularQueuePtr[T <: CircularQueuePtr[T]](val entries: Int) extends Bundl
     new_ptr
   }
 
-  final def === (that_ptr: T): Bool = this.asUInt()===that_ptr.asUInt()
+  final def === (that_ptr: T): Bool = this.asUInt===that_ptr.asUInt
 
-  final def =/= (that_ptr: T): Bool = this.asUInt()=/=that_ptr.asUInt()
+  final def =/= (that_ptr: T): Bool = this.asUInt=/=that_ptr.asUInt
+
+  final def > (that: T): Bool = {
+    val differentFlag = this.flag ^ that.flag
+    val compare = this.value > that.value
+    differentFlag ^ compare
+  }
+
+  final def < (that: T): Bool = {
+    val differentFlag = this.flag ^ that.flag
+    val compare = this.value < that.value
+    differentFlag ^ compare
+  }
 
   def toOH: UInt = UIntToOH(value, entries)
 }
 
 trait HasCircularQueuePtrHelper {
-
   def isEmpty[T <: CircularQueuePtr[T]](enq_ptr: T, deq_ptr: T): Bool = {
     enq_ptr === deq_ptr
   }
