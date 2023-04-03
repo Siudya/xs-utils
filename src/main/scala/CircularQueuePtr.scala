@@ -68,10 +68,18 @@ class CircularQueuePtr[T <: CircularQueuePtr[T]](val entries: Int) extends Bundl
     differentFlag ^ compare
   }
 
+  final def >= (that: T): Bool = {
+    this === that | this > that
+  }
+
   final def < (that: T): Bool = {
     val differentFlag = this.flag ^ that.flag
     val compare = this.value < that.value
     differentFlag ^ compare
+  }
+
+  final def <= (that: T): Bool = {
+    this === that | this < that
   }
 
   def toOH: UInt = UIntToOH(value, entries)
