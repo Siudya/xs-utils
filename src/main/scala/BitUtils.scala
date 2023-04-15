@@ -371,3 +371,15 @@ object SelectOne {
     }
   }
 }
+
+object LogicShiftRight {
+  def apply(in:UInt, n:Int):UInt = {
+    Cat(0.U(n.W), in(in.getWidth - 1, n))
+  }
+}
+
+object LogicShiftLeft {
+  def apply(in:UInt, n:Int):UInt = {
+    Cat(in(in.getWidth - n - 1, 0), 0.U(n.W))
+  }
+}
