@@ -439,7 +439,6 @@ class SRAMTemplate[T <: Data]
       clkGate.get.mbist.writeen := false.B
       clkGate.get.mbist.readen := false.B
     }
-    array.mbist.get.selectedOH := DontCare
   }
   if(hasMbist) {
     MBIST.noDedup(this)
