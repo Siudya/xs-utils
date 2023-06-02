@@ -1,8 +1,6 @@
 package xs.utils
 import chisel3._
 import chisel3.util._
-import xs.utils.Assertion.xs_assert
-import xs.utils.ParallelOperation
 class IdxGenerator(entryNum:Int) extends Module {
   private val idxWidth = entryNum
   val io = IO(new Bundle {
@@ -20,7 +18,7 @@ class IdxGenerator(entryNum:Int) extends Module {
   io.entryIndexOH.valid := res._1
   io.entryIndexOH.bits := res._2
 
-  xs_assert(Mux(io.entryIndexOH.valid, (io.entryIndexOH.bits & io.entriesValidBitVec).orR, true.B))
+  assert(Mux(io.entryIndexOH.valid, (io.entryIndexOH.bits & io.entriesValidBitVec).orR, true.B))
 }
 
 object PickOneHigh{
