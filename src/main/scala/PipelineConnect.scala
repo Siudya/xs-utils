@@ -200,7 +200,7 @@ class Pipeline[T <: Data](gen: T, depth: Int = 1, pipe: Boolean = true) extends 
     val in = Flipped(DecoupledIO[T](gen.cloneType))
     val out = DecoupledIO[T](gen.cloneType)
   })
-  val stages = (0 until depth).map(_ => Module(new Queue[T](gen, 1, pipe = pipe, flow = false)))
+  val stages = (0 until depth).map(_ => Module(new Queue[T](gen, 2, pipe = pipe, flow = false)))
 
   stages.foldLeft(io.in)((in, q) => {
     q.io.enq <> in
