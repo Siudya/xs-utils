@@ -347,6 +347,7 @@ class SRAMTemplate[T <: Data]
   gen: T, set: Int, way: Int = 1, singlePort: Boolean = false,
   shouldReset: Boolean = false, holdRead:Boolean = false,
   extraReset: Boolean = false, bypassWrite:Boolean = false,
+  hasClkGate: Boolean = false,
   // multi-cycle path
   clk_div_by_2: Boolean = false,
   // mbist support
@@ -371,15 +372,49 @@ class SRAMTemplate[T <: Data]
   if(hasMbist) SRAMTemplate.addBroadCastBundleSink(broadCastSignals)
   wrapperId += 1
 
-  val clkGate = if(clk_div_by_2) Some(Module(new MBISTClockGateCell)) else None
+  val mbistClkGate = if(clk_div_by_2) Some(Module(new MBISTClockGateCell)) else None
   if(clk_div_by_2){
-    clkGate.get.clock := clock
-    clkGate.get.reset := reset
-    clkGate.get.dft.cgen := broadCastSignals.cgen
-    clkGate.get.dft.l3dataram_clk := broadCastSignals.l3dataram_clk
-    clkGate.get.dft.l3dataramclk_bypass := broadCastSignals.l3dataramclk_bypass
+    mbistClkGate.get.clock := clock
+    mbistClkGate.get.reset := reset
+    mbistClkGate.get.dft.cgen := broadCastSignals.cgen
+    mbistClkGate.get.dft.l3dataram_clk := broadCastSignals.l3dataram_clk
+    mbistClkGate.get.dft.l3dataramclk_bypass := broadCastSignals.l3dataramclk_bypass
   }
-  val master_clock = if(clk_div_by_2) clkGate.get.out_clock else clock
+
+  withClockAndReset(clock, reset) {
+    val (resetState, resetSet) = (WireInit(false.B), WireInit(0.U))
+    if (shouldReset) {
+      val _resetState = RegInit(true.B)
+      val (_resetSet, resetFinish) = Counter(_resetState, set)
+      when(resetFinish) {
+        _resetState := false.B
+      }
+      if (extra_reset.isDefined) {
+        when(extra_reset.get) {
+          _resetState := true.B
+        }
+      }
+
+      resetState := _resetState
+      resetSet := _resetSet
+  }
+
+  val needBypass = io.w.req.valid && io.r.req.valid && (io.w.req.bits.setIdx === io.r.req.bits.setIdx)
+  val ren = if(implementSinglePort) io.r.req.valid else (!needBypass) & io.r.req.valid
+  val wen = io.w.req.valid || resetState
+  
+  val clkGate = if(hasClkGate) Some(Module(new ClockGate)) else None
+  if(hasClkGate) {
+    clkGate.get.io.test_en := false.B
+    clkGate.get.io.en := ren || wen
+    clkGate.get.io.in := clock
+  }
+  val master_clock = if(clk_div_by_2) 
+                         mbistClkGate.get.out_clock 
+                     else if(hasClkGate) 
+                         clkGate.get.io.out
+                     else
+                         clock
 
   val isNto1 = gen.getWidth > maxMbistDataWidth
 
@@ -424,9 +459,9 @@ class SRAMTemplate[T <: Data]
   if (hasMbist && hasShareBus) {
     MBIST.addRamNode(myMbistBundle, sram_prefix, myArrayIds)
     if(clk_div_by_2){
-      clkGate.get.mbist.req := myMbistBundle.ack
-      clkGate.get.mbist.writeen := myMbistBundle.we
-      clkGate.get.mbist.readen := myMbistBundle.re
+      mbistClkGate.get.mbist.req := myMbistBundle.ack
+      mbistClkGate.get.mbist.writeen := myMbistBundle.we
+      mbistClkGate.get.mbist.readen := myMbistBundle.re
     }
     val addId = if (isNto1) mbistNodeNumNto1 else mbistNodeNum1toN
     nodeId += addId
@@ -435,9 +470,9 @@ class SRAMTemplate[T <: Data]
   }
   else{
     if(clk_div_by_2){
-      clkGate.get.mbist.req := false.B
-      clkGate.get.mbist.writeen := false.B
-      clkGate.get.mbist.readen := false.B
+      mbistClkGate.get.mbist.req := false.B
+      mbistClkGate.get.mbist.writeen := false.B
+      mbistClkGate.get.mbist.readen := false.B
     }
   }
   if(hasMbist) {
@@ -445,28 +480,6 @@ class SRAMTemplate[T <: Data]
     array.mbist.get.dft_ram_bp_clken := broadCastSignals.ram_bp_clken
     array.mbist.get.dft_ram_bypass := broadCastSignals.ram_bypass
   }
-
-  withClockAndReset(master_clock, reset) {
-    val (resetState, resetSet) = (WireInit(false.B), WireInit(0.U))
-    if (shouldReset) {
-      val _resetState = RegInit(true.B)
-      val (_resetSet, resetFinish) = Counter(_resetState, set)
-      when(resetFinish) {
-        _resetState := false.B
-      }
-      if (extra_reset.isDefined) {
-        when(extra_reset.get) {
-          _resetState := true.B
-        }
-      }
-
-      resetState := _resetState
-      resetSet := _resetSet
-    }
-    val needBypass = io.w.req.valid && io.r.req.valid && (io.w.req.bits.setIdx === io.r.req.bits.setIdx)
-    val ren = if(implementSinglePort) io.r.req.valid else (!needBypass) & io.r.req.valid
-    val wen = io.w.req.valid || resetState
-    //  val realRen = (if (implementSinglePort) ren && !wen else ren)
 
     val setIdx = Mux(resetState, resetSet, io.w.req.bits.setIdx)
     val wdata = VecInit(Mux(resetState, 0.U.asTypeOf(Vec(way, gen)), io.w.req.bits.data).map(_.asTypeOf(wordType)))
