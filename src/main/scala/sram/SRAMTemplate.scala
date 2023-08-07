@@ -403,16 +403,18 @@ class SRAMTemplate[T <: Data]
   val ren = if(implementSinglePort) io.r.req.valid else (!needBypass) & io.r.req.valid
   val wen = io.w.req.valid || resetState
   
-  val clkGate = if(hasClkGate) Some(Module(new ClockGate)) else None
+  val clkGate = if(hasClkGate) Some(Module(new STD_CLKGT_func)) else None
   if(hasClkGate) {
-    clkGate.get.io.test_en := false.B
-    clkGate.get.io.en := ren || wen
-    clkGate.get.io.in := clock
+    clkGate.get.io.TE := false.B
+    clkGate.get.io.E := ren || wen
+    clkGate.get.io.CK := clock
+    clkGate.get.io.dft_l3dataram_clk := DontCare
+    clkGate.get.io.dft_l3dataramclk_bypass := DontCare
   }
   val master_clock = if(clk_div_by_2) 
                          mbistClkGate.get.out_clock 
                      else if(hasClkGate) 
-                         clkGate.get.io.out
+                         clkGate.get.io.Q
                      else
                          clock
 
