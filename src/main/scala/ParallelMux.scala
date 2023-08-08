@@ -105,6 +105,11 @@ object ParallelSingedExpandingAdd {
   def apply(in: Seq[SInt]): SInt = ParallelOperation(in, (a: SInt, b: SInt) => a +& b)
 }
 
+object ParallelUnsignedAdd {
+  def apply(in: Seq[UInt]): UInt = ParallelOperation(in, (a: UInt, b: UInt) => a +& b)
+  def apply(in: UInt): UInt = ParallelOperation(Seq.tabulate(in.getWidth)(i => in(i)), (a: UInt, b: UInt) => a +& b)
+}
+
 class SelectTwoInterRes[T <: Data](gen: T) extends Bundle {
   // val valid = Bool()
   val hasOne = Bool()
