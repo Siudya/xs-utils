@@ -351,7 +351,7 @@ class SRAMTemplate[T <: Data]
   // multi-cycle path
   clk_div_by_2: Boolean = false,
   // mbist support
-  hasMbist: Boolean = true, hasShareBus: Boolean = false,
+  hasMbist: Boolean = false, hasShareBus: Boolean = false,
   maxMbistDataWidth: Int = 256, parentName:String = s"Unknown",
   bitWrite:Boolean = false, foundry:String = "Unkown",
   sramInst:String = "STANDARD"
