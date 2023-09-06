@@ -353,8 +353,7 @@ class SRAMTemplate[T <: Data]
   // mbist support
   hasMbist: Boolean = false, hasShareBus: Boolean = false,
   maxMbistDataWidth: Int = 256, parentName:String = s"Unknown",
-  bitWrite:Boolean = false, foundry:String = "Unkown",
-  sramInst:String = "STANDARD"
+  foundry:String = "Unkown", sramInst:String = "STANDARD"
   ) extends Module {
 
   val io = IO(new Bundle {
@@ -397,91 +396,93 @@ class SRAMTemplate[T <: Data]
 
       resetState := _resetState
       resetSet := _resetSet
-  }
-
-  val needBypass = io.w.req.valid && io.r.req.valid && (io.w.req.bits.setIdx === io.r.req.bits.setIdx)
-  val ren = if(implementSinglePort) io.r.req.valid else (!needBypass) & io.r.req.valid
-  val wen = io.w.req.valid || resetState
-  
-  val clkGate = if(hasClkGate) Some(Module(new STD_CLKGT_func)) else None
-  if(hasClkGate) {
-    clkGate.get.io.TE := false.B
-    clkGate.get.io.E := ren || wen
-    clkGate.get.io.CK := clock
-    clkGate.get.io.dft_l3dataram_clk := DontCare
-    clkGate.get.io.dft_l3dataramclk_bypass := DontCare
-  }
-  val master_clock = if(clk_div_by_2) 
-                         mbistClkGate.get.out_clock 
-                     else if(hasClkGate) 
-                         clkGate.get.io.Q
-                     else
-                         clock
-
-  val isNto1 = gen.getWidth > maxMbistDataWidth
-
-  /*************implement mbist interface node(multiple nodes for one way)********/
-
-  val (mbistNodeNumForEachWay,mbistNodeNumNto1) = SRAMTemplate.getNodeNumForEachWayAndNodeNum_Nto1(gen.getWidth,way,maxMbistDataWidth)
-  val maskWidthNto1 = 1
-  val mbistDataWidthNto1 = (gen.getWidth + mbistNodeNumForEachWay - 1) / mbistNodeNumForEachWay
-  /*************implement mbist interface node(one node for multiple ways)********/
-
-  val (wayNumForEachNode, mbistNodeNum1toN) = SRAMTemplate.getWayNumForEachNodeAndNodeNum_1toN(gen.getWidth, way, maxMbistDataWidth)
-  val mbistDataWidth1toN = wayNumForEachNode * gen.getWidth
-  val maskWidth1toN = wayNumForEachNode
-  /**************************************add nodes to global************************************/
-  val myNodeNum = if (isNto1) mbistNodeNumNto1 else mbistNodeNum1toN
-  val myDataWidth = if (isNto1) mbistDataWidthNto1 else mbistDataWidth1toN
-  val myMaskWidth = if (isNto1) maskWidthNto1 else maskWidth1toN
-  val myArrayIds = Seq.tabulate(myNodeNum)(idx => SRAMTemplate.getDomainID() + idx)
-  val (array,vname) = SRAMArray(master_clock, implementSinglePort, set, way * gen.getWidth, way, MCP = clk_div_by_2,
-    hasMbist = hasMbist,selectedLen = if(hasMbist && hasShareBus) myNodeNum else 0)
-  val myNodeParam = RAM2MBISTParams(set, myDataWidth,myMaskWidth,implementSinglePort,vname,parentName,myNodeNum,myArrayIds.max,bitWrite,foundry,sramInst)
-  val sram_prefix = "sram_" + nodeId + "_"
-  val myMbistBundle = Wire(new RAM2MBIST(myNodeParam))
-  myMbistBundle := DontCare
-  if(hasMbist && hasShareBus) {
-    dontTouch(myMbistBundle)
-  }
-
-  /*******************************connection between mbist and sram*******************************/
-  val mbistSelected       = RegNext(myMbistBundle.selectedOH.orR,0.U)
-  val mbistArray          = RegEnable(myMbistBundle.array,0.U,myMbistBundle.selectedOH.orR)
-  val mbistAddr           = myMbistBundle.addr
-  val mbistAddrRead       = myMbistBundle.addr_rd
-  val mbistWriteData      = Fill(myNodeNum,myMbistBundle.wdata)
-  val mbistReadEn         = myMbistBundle.re
-  val mbistWriteEn        = myMbistBundle.we
-  val mbistWMask          = if (isNto1) Fill(way,myMbistBundle.wmask) else Fill(myNodeNum,myMbistBundle.wmask)
-  val mbistFuncSel        = myMbistBundle.ack
-  /********************************************************************************************/
-  val wordType = UInt(gen.getWidth.W)
-
-  if (hasMbist && hasShareBus) {
-    MBIST.addRamNode(myMbistBundle, sram_prefix, myArrayIds)
-    if(clk_div_by_2){
-      mbistClkGate.get.mbist.req := myMbistBundle.ack
-      mbistClkGate.get.mbist.writeen := myMbistBundle.we
-      mbistClkGate.get.mbist.readen := myMbistBundle.re
     }
-    val addId = if (isNto1) mbistNodeNumNto1 else mbistNodeNum1toN
-    nodeId += addId
-    SRAMTemplate.increaseDomainID(addId)
-    array.mbist.get.selectedOH := Mux(broadCastSignals.ram_hold, 0.U, myMbistBundle.selectedOH)
-  }
-  else{
-    if(clk_div_by_2){
-      mbistClkGate.get.mbist.req := false.B
-      mbistClkGate.get.mbist.writeen := false.B
-      mbistClkGate.get.mbist.readen := false.B
+
+    val needBypass = io.w.req.valid && io.r.req.valid && (io.w.req.bits.setIdx === io.r.req.bits.setIdx)
+    val ren = if (implementSinglePort) io.r.req.valid else (!needBypass) & io.r.req.valid
+    val wen = io.w.req.valid || resetState
+
+    val clkGate = if (hasClkGate) Some(Module(new STD_CLKGT_func)) else None
+    if (hasClkGate) {
+      clkGate.get.io.TE := false.B
+      clkGate.get.io.E := ren || wen
+      clkGate.get.io.CK := clock
+      clkGate.get.io.dft_l3dataram_clk := DontCare
+      clkGate.get.io.dft_l3dataramclk_bypass := DontCare
     }
-  }
-  if(hasMbist) {
-    MBIST.noDedup(this)
-    array.mbist.get.dft_ram_bp_clken := broadCastSignals.ram_bp_clken
-    array.mbist.get.dft_ram_bypass := broadCastSignals.ram_bypass
-  }
+    val master_clock = if (clk_div_by_2) {
+      mbistClkGate.get.out_clock
+    } else if (hasClkGate) {
+      clkGate.get.io.Q
+    } else {
+      clock
+    }
+
+    val isNto1 = gen.getWidth > maxMbistDataWidth
+
+    /** ***********implement mbist interface node(multiple nodes for one way)******* */
+
+    val (mbistNodeNumForEachWay, mbistNodeNumNto1) = SRAMTemplate.getNodeNumForEachWayAndNodeNum_Nto1(gen.getWidth, way, maxMbistDataWidth)
+    val maskWidthNto1 = 1
+    val mbistDataWidthNto1 = (gen.getWidth + mbistNodeNumForEachWay - 1) / mbistNodeNumForEachWay
+    /** ***********implement mbist interface node(one node for multiple ways)******* */
+
+    val (wayNumForEachNode, mbistNodeNum1toN) = SRAMTemplate.getWayNumForEachNodeAndNodeNum_1toN(gen.getWidth, way, maxMbistDataWidth)
+    val mbistDataWidth1toN = wayNumForEachNode * gen.getWidth
+    val maskWidth1toN = wayNumForEachNode
+    /** ************************************add nodes to global*********************************** */
+    val myNodeNum = if (isNto1) mbistNodeNumNto1 else mbistNodeNum1toN
+    val myDataWidth = if (isNto1) mbistDataWidthNto1 else mbistDataWidth1toN
+    val myMaskWidth = if (isNto1) maskWidthNto1 else maskWidth1toN
+    val myArrayIds = Seq.tabulate(myNodeNum)(idx => SRAMTemplate.getDomainID() + idx)
+    val bitWrite = myMaskWidth != 1
+    val (array, vname) = SRAMArray(master_clock, implementSinglePort, set, way * gen.getWidth, way, MCP = clk_div_by_2,
+      hasMbist = hasMbist, selectedLen = if (hasMbist && hasShareBus) myNodeNum else 0)
+    val myNodeParam = RAM2MBISTParams(set, myDataWidth, myMaskWidth, implementSinglePort, vname, parentName, myNodeNum, myArrayIds.max, bitWrite, foundry, sramInst)
+    val sram_prefix = "sram_" + nodeId + "_"
+    val myMbistBundle = Wire(new RAM2MBIST(myNodeParam))
+    myMbistBundle := DontCare
+    if (hasMbist && hasShareBus) {
+      dontTouch(myMbistBundle)
+    }
+
+    /** *****************************connection between mbist and sram****************************** */
+    val mbistSelected = RegNext(myMbistBundle.selectedOH.orR, 0.U)
+    val mbistArray = RegEnable(myMbistBundle.array, 0.U, myMbistBundle.selectedOH.orR)
+    val mbistAddr = myMbistBundle.addr
+    val mbistAddrRead = myMbistBundle.addr_rd
+    val mbistWriteData = Fill(myNodeNum, myMbistBundle.wdata)
+    val mbistReadEn = myMbistBundle.re
+    val mbistWriteEn = myMbistBundle.we
+    val mbistWMask = if (isNto1) Fill(way, myMbistBundle.wmask) else Fill(myNodeNum, myMbistBundle.wmask)
+    val mbistFuncSel = myMbistBundle.ack
+    /** ***************************************************************************************** */
+    val wordType = UInt(gen.getWidth.W)
+
+    if (hasMbist && hasShareBus) {
+      MBIST.addRamNode(myMbistBundle, sram_prefix, myArrayIds)
+      if (clk_div_by_2) {
+        mbistClkGate.get.mbist.req := myMbistBundle.ack
+        mbistClkGate.get.mbist.writeen := myMbistBundle.we
+        mbistClkGate.get.mbist.readen := myMbistBundle.re
+      }
+      val addId = if (isNto1) mbistNodeNumNto1 else mbistNodeNum1toN
+      nodeId += addId
+      SRAMTemplate.increaseDomainID(addId)
+      array.mbist.get.selectedOH := Mux(broadCastSignals.ram_hold, 0.U, myMbistBundle.selectedOH)
+    }
+    else {
+      if (clk_div_by_2) {
+        mbistClkGate.get.mbist.req := false.B
+        mbistClkGate.get.mbist.writeen := false.B
+        mbistClkGate.get.mbist.readen := false.B
+      }
+    }
+    if (hasMbist) {
+      MBIST.noDedup(this)
+      array.mbist.get.dft_ram_bp_clken := broadCastSignals.ram_bp_clken
+      array.mbist.get.dft_ram_bypass := broadCastSignals.ram_bypass
+    }
 
     val setIdx = Mux(resetState, resetSet, io.w.req.bits.setIdx)
     val wdata = VecInit(Mux(resetState, 0.U.asTypeOf(Vec(way, gen)), io.w.req.bits.data).map(_.asTypeOf(wordType)))
@@ -529,9 +530,10 @@ class SRAMTemplate[T <: Data]
     val bypass_wdata = if (implementBypassWrite) VecInit(RegNext(io.w.req.bits.data).map(_.asTypeOf(wordType)))
     else VecInit((0 until way).map(_ => LFSR64().asTypeOf(wordType)))
     val bypass_mask = need_bypass(io.w.req.valid, io.w.req.bits.setIdx, io.w.req.bits.waymask.getOrElse("b1".U), io.r.req.valid, io.r.req.bits.setIdx, mbistFuncSel)
-    val mem_rdata = {
-      if (implementSinglePort) raw_rdata
-      else VecInit(bypass_mask.asBools.zip(raw_rdata).zip(bypass_wdata).map {
+    val mem_rdata = if (implementSinglePort) {
+      raw_rdata
+    } else {
+      VecInit(bypass_mask.asBools.zip(raw_rdata).zip(bypass_wdata).map {
         case ((m, r), w) => Mux(m, w, r)
       })
     }
