@@ -509,8 +509,7 @@ class SRAMTemplate[T <: Data]
 
     // bypass for dual-port SRAMs
     if (!bypassWrite && !singlePort) {
-      println(s"ERROR: 2-port SRAM $parentName does not enable bypassWrite. Please check it!!!\n")
-      assert(!(ren && wen && io.r.req.bits.setIdx === io.w.req.bits.setIdx))
+      require(false, s"ERROR: 2-port SRAM $parentName does not enable bypassWrite. Please check it!!!\n")
     }
     // force bypass write for implemented dual-port SRAMs
     val implementBypassWrite = !implementSinglePort && (bypassWrite || singlePort)
