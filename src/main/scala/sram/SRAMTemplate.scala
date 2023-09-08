@@ -21,13 +21,13 @@
 package xs.utils.sram
 
 import chisel3._
+import chisel3.experimental.hierarchy.{Definition, Instance, instantiable, public}
 import chisel3.util._
 import chisel3.util.experimental.BoringUtils
 import xs.utils.mbist._
 import xs.utils.sram.SRAMTemplate.{nodeId, wrapperId}
 import xs.utils.{CustomAnnotations, HoldUnless, LFSR64, ParallelMux}
-
-import scala.collection.mutable.ListBuffer
+import scala.collection.mutable
 import scala.math.sqrt
 
 class SRAMMbistIO(selectedLen:Int) extends Bundle {
@@ -45,116 +45,97 @@ class BroadCastBundle() extends Bundle {
   val cgen = Input(Bool())
 }
 
-abstract class SRAMArray(hasMbist: Boolean, sramName: Option[String] = None,selectedLen:Int) extends RawModule {
-  val mbist = if (hasMbist) Some(IO(new SRAMMbistIO(selectedLen))) else None
+@instantiable
+abstract class SRAMArray(depth: Int, width: Int, maskSegments: Int, hasMbist: Boolean, sramName: Option[String] = None, selectedLen:Int, singlePort:Boolean) extends RawModule {
+  @public val mbist = if (hasMbist) Some(IO(new SRAMMbistIO(selectedLen))) else None
   if (mbist.isDefined) {
     dontTouch(mbist.get)
   }
 
-  override def desiredName: String = sramName.getOrElse(super.desiredName)
-
-  def init(clock: Clock, writeClock: Option[Clock]): Unit
-  def read(addr: UInt): UInt
-  def read(addr: UInt, enable: Bool): UInt = {
-    var rdata = 0.U
-    when (enable) {
-      rdata = read(addr)
-    }
-    rdata
+  @public val RW0 = if(singlePort){
+    Some(IO(new Bundle() {
+      val clk = Input(Clock())
+      val addr = Input(UInt(log2Ceil(depth).W))
+      val en = Input(Bool())
+      val wmode = Input(Bool())
+      val wmask = if (maskSegments > 1) Input(UInt(maskSegments.W)) else Input(UInt(0.W))
+      val wdata = Input(UInt(width.W))
+      val rdata = Output(UInt(width.W))
+    }))
+  } else{
+    None
   }
-  def write(addr: UInt, data: UInt): Unit
-  def write(addr: UInt, data: UInt, mask: UInt): Unit
+
+  @public val R0 = if(!singlePort) {
+    Some(IO(new Bundle() {
+      val clk = Input(Clock())
+      val addr = Input(UInt(log2Ceil(depth).W))
+      val en = Input(Bool())
+      val data = Output(UInt(width.W))
+    }))
+  } else {
+    None
+  }
+
+  @public val W0 = if(!singlePort) {
+    Some(IO(new Bundle() {
+      val clk = Input(Clock())
+      val addr = Input(UInt(log2Ceil(depth).W))
+      val en = Input(Bool())
+      val data = Input(UInt(width.W))
+      val mask = if (maskSegments > 1) Input(UInt(maskSegments.W)) else Input(UInt(0.W))
+    }))
+  } else {
+    None
+  }
+
+  override def desiredName: String = sramName.getOrElse(super.desiredName)
+  MBIST.noDedup(this)
 }
 
-class SRAMArray1P(depth: Int, width: Int, maskSegments: Int, hasMbist: Boolean, sramName: Option[String] = None,selectedLen:Int)
-  extends SRAMArray(hasMbist, sramName,selectedLen) {
-  val RW0 = IO(new Bundle() {
-    val clk   = Input(Clock())
-    val addr  = Input(UInt(log2Ceil(depth).W))
-    val en    = Input(Bool())
-    val wmode = Input(Bool())
-    val wmask = if (maskSegments > 1) Some(Input(UInt(maskSegments.W))) else None
-    val wdata = Input(UInt(width.W))
-    val rdata = Output(UInt(width.W))
-  })
+@instantiable
+class SRAMArray1P(depth: Int, width: Int, maskSegments: Int, hasMbist: Boolean, sramName: Option[String] = None, selectedLen:Int)
+  extends SRAMArray(depth, width, maskSegments, hasMbist, sramName, selectedLen, true) {
 
-  withClock(RW0.clk) {
+  withClock(RW0.get.clk) {
     val ram = Seq.fill(maskSegments)(Mem(depth, UInt((width / maskSegments).W)))
     // read: rdata will keep stable until the next read enable.
-    val RW0_ren = RW0.en && !RW0.wmode
-    val RW0_rdata = WireInit(VecInit(ram.map(_.read(RW0.addr))))
-    RW0.rdata := RegEnable(RW0_rdata.asUInt, RW0_ren)
+    val RW0_ren = RW0.get.en && !RW0.get.wmode
+    val RW0_rdata = WireInit(VecInit(ram.map(_.read(RW0.get.addr))))
+    RW0.get.rdata := RegEnable(RW0_rdata.asUInt, RW0_ren)
     // write with mask
-    val RW0_wen = RW0.en && RW0.wmode
-    val RW0_wdata = RW0.wdata.asTypeOf(Vec(maskSegments, UInt((width / maskSegments).W)))
+    val RW0_wen = RW0.get.en && RW0.get.wmode
+    val RW0_wdata = RW0.get.wdata.asTypeOf(Vec(maskSegments, UInt((width / maskSegments).W)))
     for (i <- 0 until maskSegments) {
-      val RW0_wmask = if (RW0.wmask.isDefined) RW0.wmask.get(i) else true.B
+      val RW0_wmask = if (maskSegments > 1) RW0.get.wmask(i) else true.B
       when (RW0_wen && RW0_wmask) {
-        ram(i)(RW0.addr) := RW0_wdata(i)
+        ram(i)(RW0.get.addr) := RW0_wdata(i)
       }
     }
   }
-
-  def init(clock: Clock, writeClock: Option[Clock] = None): Unit = {
-    dontTouch(RW0)
-    RW0 := DontCare
-    RW0.clk := clock
-    RW0.en := false.B
-  }
-  def read(addr: UInt): UInt = {
-    RW0.addr := addr
-    RW0.en := true.B
-    RW0.wmode := false.B
-    RW0.rdata
-  }
-  def write(addr: UInt, data: UInt): Unit = {
-    val mask = Fill(maskSegments, true.B)
-    write(addr, data, mask)
-  }
-  def write(addr: UInt, data: UInt, mask: UInt): Unit = {
-    RW0.addr := addr
-    RW0.en := true.B
-    RW0.wmode := true.B
-    if (RW0.wmask.isDefined) {
-      RW0.wmask.get := mask
-    }
-    RW0.wdata := data
-  }
 }
 
-class SRAMArray2P(depth: Int, width: Int, maskSegments: Int, hasMbist: Boolean, sramName: Option[String] = None,selectedLen:Int)
-  extends SRAMArray(hasMbist, sramName,selectedLen)  {
+@instantiable
+class SRAMArray2P(depth: Int, width: Int, maskSegments: Int, hasMbist: Boolean, sramName: Option[String] = None, selectedLen:Int)
+  extends SRAMArray(depth, width, maskSegments, hasMbist, sramName, selectedLen, false)  {
   require(width % maskSegments == 0)
 
-  val R0 = IO(new Bundle() {
-    val clk   = Input(Clock())
-    val addr  = Input(UInt(log2Ceil(depth).W))
-    val en    = Input(Bool())
-    val data  = Output(UInt(width.W))
-  })
 
-  val W0 = IO(new Bundle() {
-    val clk   = Input(Clock())
-    val addr  = Input(UInt(log2Ceil(depth).W))
-    val en    = Input(Bool())
-    val data  = Input(UInt(width.W))
-    val mask  = if (maskSegments > 1) Some(Input(UInt(maskSegments.W))) else None
-  })
 
   // read: rdata will keep stable until the next read enable.
   val ram = Seq.fill(maskSegments)(Mem(depth, UInt((width / maskSegments).W)))
 
-  withClock(W0.clk) {
-    val W0_data = W0.data.asTypeOf(Vec(maskSegments, UInt((width / maskSegments).W)))
+  withClock(W0.get.clk) {
+    val W0_data = W0.get.data.asTypeOf(Vec(maskSegments, UInt((width / maskSegments).W)))
     for (i <- 0 until maskSegments) {
-      val W0_mask = if (W0.mask.isDefined) W0.mask.get(i) else true.B
-      when(W0.en && W0_mask) {
-        ram(i)(W0.addr) := W0_data(i)
+      val W0_mask = if (maskSegments > 1) W0.get.mask(i) else true.B
+      when(W0.get.en && W0_mask) {
+        ram(i)(W0.get.addr) := W0_data(i)
       }
     }
   }
 
-  withClock(R0.clk) {
+  withClock(R0.get.clk) {
     // RW0_conflict_data will be replaced by width'x in Verilog by scripts.
     val RW0_conflict_data = Wire(UInt((width / maskSegments).W))
     RW0_conflict_data := ((1L << (width / maskSegments)) - 1).U
@@ -162,78 +143,89 @@ class SRAMArray2P(depth: Int, width: Int, maskSegments: Int, hasMbist: Boolean, 
     dontTouch(RW0_conflict_data)
     val R0_data = VecInit((0 until maskSegments).map(i => {
       // To align with the real memory model, R0.data should be width'x when R0 and W0 have conflicts.
-      val wmask = if (W0.mask.isDefined) W0.mask.get(i) else true.B
-      val RW0_conflict_REG = RegEnable(W0.en && wmask && R0.addr === W0.addr, R0.en)
-      val data_REG = RegEnable(ram(i).read(R0.addr), R0.en)
+      val wmask = if (maskSegments > 1) W0.get.mask(i) else true.B
+      val RW0_conflict_REG = RegEnable(W0.get.en && wmask && R0.get.addr === W0.get.addr, R0.get.en)
+      val data_REG = RegEnable(ram(i).read(R0.get.addr), R0.get.en)
       // The read data naturally holds when not enabled.
       Mux(RW0_conflict_REG, RW0_conflict_data, data_REG)
     })).asUInt
-    R0.data := R0_data
+    R0.get.data := R0_data
     // write with mask
-  }
-
-  def init(clock: Clock, writeClock: Option[Clock]): Unit = {
-    dontTouch(R0)
-    dontTouch(W0)
-    R0 := DontCare
-    R0.clk := clock
-    R0.en := false.B
-    W0 := DontCare
-    W0.clk := writeClock.getOrElse(clock)
-    W0.en := false.B
-  }
-  def read(addr: UInt): UInt = {
-    R0.addr := addr
-    R0.en := true.B
-    R0.data
-  }
-  def write(addr: UInt, data: UInt): Unit = {
-    write(addr, data, ((1L << maskSegments) - 1).U)
-  }
-  def write(addr: UInt, data: UInt, mask: UInt): Unit = {
-    W0.addr := addr
-    W0.en := true.B
-    if (W0.mask.isDefined) {
-      W0.mask.get := mask
-    }
-    W0.data := data
   }
 }
 
-class SRAMArray1P_MCP(depth: Int, width: Int, maskSegments: Int, hasMbist: Boolean, sramName: Option[String] = None,selectedLen:Int)
-  extends SRAMArray1P(depth, width, maskSegments, hasMbist, sramName, selectedLen)
-
-class SRAMArray2P_MCP(depth: Int, width: Int, maskSegments: Int, hasMbist: Boolean, sramName: Option[String] = None,selectedLen:Int)
-  extends SRAMArray2P(depth, width, maskSegments, hasMbist, sramName, selectedLen)
-
 object SRAMArray {
-  private val instances = ListBuffer.empty[(Boolean, Int, Int, Int, Boolean, Boolean)]
+  private val defMap = mutable.Map[String, Definition[SRAMArray]]()
+
+  def init(sram:Instance[SRAMArray], singlePort:Boolean, clock: Clock, writeClock: Option[Clock]):Unit = {
+    if(singlePort){
+      dontTouch(sram.RW0.get)
+      sram.RW0.get := DontCare
+      sram.RW0.get.clk := clock
+      sram.RW0.get.en := false.B
+    } else {
+      dontTouch(sram.R0.get)
+      dontTouch(sram.W0.get)
+      sram.R0.get := DontCare
+      sram.R0.get.clk := clock
+      sram.R0.get.en := false.B
+      sram.W0.get := DontCare
+      sram.W0.get.clk := writeClock.getOrElse(clock)
+      sram.W0.get.en := false.B
+    }
+  }
+
+  def read(sram:Instance[SRAMArray], singlePort:Boolean, addr: UInt, enable: Bool): UInt = {
+    if(singlePort){
+      sram.RW0.get.addr := addr
+      sram.RW0.get.en := enable
+      sram.RW0.get.wmode := false.B
+      sram.RW0.get.rdata
+    } else {
+      sram.R0.get.addr := addr
+      sram.R0.get.en := enable
+      sram.R0.get.data
+    }
+  }
+
+  def write(sram:Instance[SRAMArray], singlePort:Boolean, addr: UInt, data: UInt, mask: UInt): Unit = {
+    if(singlePort){
+      sram.RW0.get.addr := addr
+      sram.RW0.get.en := true.B
+      sram.RW0.get.wmode := true.B
+      if (sram.RW0.get.wmask.getWidth > 1) sram.RW0.get.wmask := mask else sram.RW0.get.wmask := true.B
+      sram.RW0.get.wdata := data
+    } else {
+      sram.W0.get.addr := addr
+      sram.W0.get.en := true.B
+      if (sram.W0.get.mask.getWidth > 1) sram.W0.get.mask := mask else sram.W0.get.mask := true.B
+      sram.W0.get.data := data
+    }
+  }
 
   def apply(clock: Clock, singlePort: Boolean, depth: Int, width: Int,
             maskSegments: Int = 1,
             MCP: Boolean = false,
             writeClock: Option[Clock] = None,
             hasMbist: Boolean,
-            selectedLen:Int
-           ): (SRAMArray,String) = {
-    val sram_key = (singlePort, depth, width, maskSegments, MCP, hasMbist)
-    if (!instances.contains(sram_key)) {
-      instances += sram_key
-    }
+            selectedLen:Int,
+            suffix:String = ""
+           ): (Instance[SRAMArray],String) = {
+    val mbist = if(hasMbist) "_bist" else ""
     val mcpPrefix = if (MCP) "_multicycle" else ""
     val numPort = if (singlePort) 1 else 2
     val maskWidth = width / maskSegments
-    val sramName = Some(s"sram_array_${numPort}p${depth}x${width}m$maskWidth$mcpPrefix")
-    val array = if (singlePort && !MCP) {
-      Module(new SRAMArray1P(depth, width, maskSegments, hasMbist, sramName, selectedLen))
-    } else if (!singlePort && !MCP) {
-      Module(new SRAMArray2P(depth, width, maskSegments, hasMbist, sramName, selectedLen))
-    } else if (singlePort && MCP) {
-      Module(new SRAMArray1P_MCP(depth, width, maskSegments, hasMbist, sramName, selectedLen))
-    } else {
-      Module(new SRAMArray2P_MCP(depth, width, maskSegments, hasMbist, sramName, selectedLen))
+    val sramName = Some(s"sram_array_${numPort}p${depth}x${width}m$maskWidth$mbist$mcpPrefix$suffix")
+    if(!defMap.contains(sramName.get)){
+      val sramDef = if(singlePort){
+        Definition(new SRAMArray1P(depth, width, maskSegments, hasMbist, sramName, selectedLen))
+      } else {
+        Definition(new SRAMArray2P(depth, width, maskSegments, hasMbist, sramName, selectedLen))
+      }
+      defMap(sramName.get) = sramDef
     }
-    array.init(clock, writeClock)
+    val array = Instance(defMap(sramName.get))
+    SRAMArray.init(array, singlePort, clock, writeClock)
     (array,sramName.get)
   }
 }
@@ -513,9 +505,9 @@ class SRAMTemplate[T <: Data]
 
     val toSRAMRen = if (implementSinglePort) (finalRen && !finalWen) else finalRen
 
-    val raw_rdata = array.read(finalReadSetIdx, toSRAMRen).asTypeOf(Vec(way, wordType))
+    val raw_rdata = SRAMArray.read(array, implementSinglePort, finalReadSetIdx, toSRAMRen).asTypeOf(Vec(way, wordType))
     when(finalWen) {
-      array.write(finalWriteSetIdx, finalWriteData.asUInt, finalWmask)
+      SRAMArray.write(array, implementSinglePort, finalWriteSetIdx, finalWriteData.asUInt, finalWmask)
     }
 
     // bypass for dual-port SRAMs
