@@ -12,9 +12,9 @@ module STD_CLKGT_func (
 
   assign clk_en = E | TE;
 
-  always @(posedge CK) 
+  always @(CK or clk_en)
     begin
-      clk_en_reg = clk_en;
+      if(CK == 1'b0) clk_en_reg <= clk_en;
     end
 
   assign Q = CK & clk_en_reg;
