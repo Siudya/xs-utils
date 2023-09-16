@@ -472,12 +472,14 @@ class SRAMTemplate[T <: Data]
       nodeId += addId
       SRAMTemplate.increaseDomainID(addId)
       array.mbist.get.selectedOH := Mux(broadCastSignals.ram_hold, 0.U, myMbistBundle.selectedOH)
-    }
-    else {
+    } else {
       if (clk_div_by_2) {
         mbistClkGate.get.mbist.req := false.B
         mbistClkGate.get.mbist.writeen := false.B
         mbistClkGate.get.mbist.readen := false.B
+      }
+      if(hasMbist){
+        array.mbist.get.selectedOH := DontCare
       }
     }
     if (hasMbist) {
