@@ -24,7 +24,7 @@ class DFTResetSignals extends Bundle{
   val scan_mode = Bool()
 }
 
-class ResetGen(SYNC_NUM: Int = 2) extends MultiIOModule {
+class ResetGen(SYNC_NUM: Int = 2) extends Module {
   val o_reset = IO(Output(AsyncReset()))
   val dft = IO(Input(new DFTResetSignals()))
   val real_reset = Mux(dft.mode, dft.lgc_rst_n.asBool, reset.asBool).asAsyncReset
@@ -42,7 +42,7 @@ class ResetGen(SYNC_NUM: Int = 2) extends MultiIOModule {
 
 trait ResetNode
 
-case class ModuleNode(mod: MultiIOModule) extends ResetNode
+case class ModuleNode(mod: Module) extends ResetNode
 
 case class ResetGenNode(children: Seq[ResetNode]) extends ResetNode
 
@@ -78,7 +78,7 @@ object ResetGen {
     }
   }
 
-  def apply(resetChain: Seq[Seq[MultiIOModule]], reset: Reset,  dft:Option[DFTResetSignals], sim: Boolean): Seq[Reset] = {
+  def apply(resetChain: Seq[Seq[Module]], reset: Reset,  dft:Option[DFTResetSignals], sim: Boolean): Seq[Reset] = {
     val resetReg = Wire(Vec(resetChain.length + 1, Reset()))
     resetReg.foreach(_ := reset)
     for ((resetLevel, i) <- resetChain.zipWithIndex) {
