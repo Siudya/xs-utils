@@ -64,36 +64,34 @@ class MBISTInterface(params:Seq[MBISTBusParams],ids:Seq[Seq[Int]],name:String,pi
 
   val info = InterfaceInfo(name, myMbistBusParams.addrWidth, myMbistBusParams.dataWidth, myMbistBusParams.arrayWidth, myMbistBusParams.maskWidth, myMbistBusParams.hasDualPort)
 
-  val gate = mbist.all | mbist.req
-  val arrayReg = RegEnable(mbist.array,gate)
-  val allReg = RegNext(mbist.all,0.U)
-  val reqReg = RegNext(mbist.req,0.U)
-  val weReg = RegEnable(mbist.writeen,gate)
-  val beReg = RegEnable(mbist.be,gate)
-  val addrReg = RegEnable(mbist.addr,gate)
-  val inDataReg = RegEnable(mbist.indata,gate)
-  val reReg = RegEnable(mbist.readen,gate)
-  val addrRdReg = RegEnable(mbist.addr_rd,gate)
-  val hit = if(params.length > 1) ids.map(item => ParallelOR(item.map(_.U === arrayReg))) else Seq(true.B)
-  val outDataVec = toPipeline.map(_.mbist_outdata)
-  mbist.outdata := RegEnable(ParallelMux(hit zip outDataVec),gate)
-  val ackVec = toPipeline.map(_.mbist_ack)
-  mbist.ack := RegNext(ParallelMux(hit zip ackVec),0.U)
-
+  private val array = mbist.array
+  private val all = mbist.all
+  private val req = mbist.req
+  private val we = mbist.writeen
+  private val be = mbist.be
+  private val addr = mbist.addr
+  private val inData = mbist.indata
+  private val re = mbist.readen
+  private val addrRd = mbist.addr_rd
+  private val hit = if(params.length > 1) ids.map(item => ParallelOR(item.map(_.U === array))) else Seq(true.B)
+  private val outDataVec = toPipeline.map(_.mbist_outdata)
+  mbist.outdata := Mux1H(hit, outDataVec)
+  private val ackVec = toPipeline.map(_.mbist_ack)
+  mbist.ack := Mux1H(hit, ackVec)
 
   toPipeline.foreach({
     case toPipeline =>
-      toPipeline.mbist_array := arrayReg
-      toPipeline.mbist_all := allReg
-      toPipeline.mbist_req := reqReg
+      toPipeline.mbist_array := array
+      toPipeline.mbist_all := all
+      toPipeline.mbist_req := req
 
-      toPipeline.mbist_writeen := weReg
-      toPipeline.mbist_be := beReg
-      toPipeline.mbist_addr := addrReg
-      toPipeline.mbist_indata := inDataReg
+      toPipeline.mbist_writeen := we
+      toPipeline.mbist_be := be
+      toPipeline.mbist_addr := addr
+      toPipeline.mbist_indata := inData
 
-      toPipeline.mbist_readen := reReg
-      toPipeline.mbist_addr_rd := addrRdReg
+      toPipeline.mbist_readen := re
+      toPipeline.mbist_addr_rd := addrRd
   })
 }
 
@@ -126,7 +124,7 @@ object MBISTPipeline {
         fileHandle.print(p.hierarchyName + ",")
         fileHandle.print(p.vname + ".v,")
         fileHandle.print(id.toString + ",")
-        fileHandle.print((depth * 2 + 2).toString + ",")
+        fileHandle.print((depth * 2).toString + ",")
         fileHandle.print(if(p.bitWrite) "true," else "false,")
         fileHandle.print(p.nodeNum + ",")
         fileHandle.print(p.foundry + ",")
