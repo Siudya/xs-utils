@@ -45,6 +45,7 @@ case class MBISTBusParams
   set: Int,
   dataWidth: Int,
   maskWidth: Int,
+  hasDualPort: Boolean,
   domainName:String = "Unknown"
 ) {
   val arrayWidth = log2Up(array + 1)

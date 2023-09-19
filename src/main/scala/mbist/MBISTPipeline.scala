@@ -46,9 +46,10 @@ case class InterfaceInfo
   addrWidth: Int,
   dataWidth: Int,
   arrayWidth: Int,
-  beWidth: Int
+  beWidth: Int,
+  hasDualPort: Boolean
 ){
-  override def toString = s"$name,$addrWidth,$dataWidth,$arrayWidth,$beWidth"
+  override def toString = s"$name,$addrWidth,$dataWidth,$arrayWidth,$beWidth," + (if(hasDualPort) "true" else "false")
 }
 
 class MBISTInterface(params:Seq[MBISTBusParams],ids:Seq[Seq[Int]],name:String,pipelineNum:Int) extends Module{
@@ -61,7 +62,7 @@ class MBISTInterface(params:Seq[MBISTBusParams],ids:Seq[Seq[Int]],name:String,pi
   val toPipeline = IO(MixedVec(Seq.tabulate(pipelineNum)(idx => Flipped(new MBISTBus(params(idx))))))
   val mbist = IO(new MbitsStandardInterface(myMbistBusParams))
 
-  val info = InterfaceInfo(name, myMbistBusParams.addrWidth, myMbistBusParams.dataWidth, myMbistBusParams.arrayWidth, myMbistBusParams.maskWidth)
+  val info = InterfaceInfo(name, myMbistBusParams.addrWidth, myMbistBusParams.dataWidth, myMbistBusParams.arrayWidth, myMbistBusParams.maskWidth, myMbistBusParams.hasDualPort)
 
   val gate = mbist.all | mbist.req
   val arrayReg = RegEnable(mbist.array,gate)
@@ -115,7 +116,7 @@ object MBISTPipeline {
     }
 
     val fileHandle = new PrintWriter(f"build/$infoName.csv")
-    val intfHeads = "\"INTF Name\", \"INTF Addr\", \"INTF Data\", \"INTF Array\", \"INTF Be\"\n"
+    val intfHeads = "\"INTF Name\", \"INTF Addr\", \"INTF Data\", \"INTF Array\", \"INTF Be\", \"Has TpSRAM\"\n"
     fileHandle.print(intfHeads)
     fileHandle.print(intfInfo.toString + '\n')
     val sramHeads = "\"SRAM Name\",\"SRAM Type\",\"SRAM array\",\"pipeline depth\",\"bitWrite\",\"selectOH width\",\"foundry\",\"SRAM Inst\"\n"
