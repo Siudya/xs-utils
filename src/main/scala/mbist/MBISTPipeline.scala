@@ -75,9 +75,9 @@ class MBISTInterface(params:Seq[MBISTBusParams],ids:Seq[Seq[Int]],name:String,pi
   private val addrRd = mbist.addr_rd
   private val hit = if(params.length > 1) ids.map(item => ParallelOR(item.map(_.U === array))) else Seq(true.B)
   private val outDataVec = toPipeline.map(_.mbist_outdata)
-  mbist.outdata := Mux1H(hit, outDataVec)
+  mbist.outdata := Mux1H(hit zip outDataVec)
   private val ackVec = toPipeline.map(_.mbist_ack)
-  mbist.ack := Mux1H(hit, ackVec)
+  mbist.ack := Mux1H(hit zip ackVec)
 
   toPipeline.foreach({
     case toPipeline =>
