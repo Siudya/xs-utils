@@ -11,12 +11,23 @@ module STD_CLKGT_func (
   reg  clk_en_reg;
 
   assign clk_en = E | TE;
-
-  always @(posedge CK) 
-    begin
-      clk_en_reg = clk_en;
-    end
-
   assign Q = CK & clk_en_reg;
+
+`ifdef VCS
+  always @(CK or clk_en)
+  begin
+    if(CK == 1'b0) clk_en_reg <= clk_en;
+  end
+`elsif VERILATOR_5016
+  always @(CK or clk_en)
+  begin
+    if(CK == 1'b0) clk_en_reg <= clk_en;
+  end
+`else
+  always @(posedge CK) 
+  begin
+    clk_en_reg = clk_en;
+  end
+`endif
 
 endmodule // Copy from Xihu
