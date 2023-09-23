@@ -1,19 +1,19 @@
 /** *************************************************************************************
-  * Copyright (c) 2020-2022 Institute of Computing Technology, Chinese Academy of Sciences
-  * Copyright (c) 2020-2022 Peng Cheng Laboratory
-  *
-  * XiangShan is licensed under Mulan PSL v2.
-  * You can use this software according to the terms and conditions of the Mulan PSL v2.
-  * You may obtain a copy of Mulan PSL v2 at:
-  *          http://license.coscl.org.cn/MulanPSL2
-  *
-  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
-  * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
-  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
-  *
-  * See the Mulan PSL v2 for more details.
-  * *************************************************************************************
-  */
+ * Copyright (c) 2020-2022 Institute of Computing Technology, Chinese Academy of Sciences
+ * Copyright (c) 2020-2022 Peng Cheng Laboratory
+ *
+ * XiangShan is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ *
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ *
+ * See the Mulan PSL v2 for more details.
+ * *************************************************************************************
+ */
 
 package xs.utils.mbist
 
@@ -115,10 +115,12 @@ object MBIST {
     val node = new PipelineNodeSRAM (bd, prefix, level,ids,depth)
     node.children = children.map {
       case ram: RAMBaseNode =>
-        val childBd = Wire(Flipped(ram.bd.cloneType))
+        val childBd = Wire(ram.bd.cloneType)
+        childBd := DontCare
         new SRAMNode (childBd, ram.prefix, ram.array_id)
       case pl: PipelineBaseNode =>
-        val childBd = Wire(Flipped(pl.bd.cloneType))
+        val childBd = Wire(pl.bd.cloneType)
+        childBd := DontCare
         new PipelineNodeSRAM (childBd, pl.prefix, pl.level,pl.array_id,pl.array_depth)
     }
     node.ramParamsBelongToThis = children.flatMap ({
@@ -130,8 +132,8 @@ object MBIST {
     globalNodes = remain :+ node
 
     for((nn, on) <- node.children.zip(children)){
-      on.bd.get_sink_data.zip(nn.bd.get_sink_data).foreach({case(a, b) => BoringUtils.rwTap(a) := b})
-      on.bd.get_source_data.zip(nn.bd.get_source_data).foreach({case(a, b) => b := BoringUtils.tap(a)})
+      on.bd.get_sink_data.zip(nn.bd.get_sink_data).foreach({case(a, b) => BoringUtils.bore(a) := b})
+      on.bd.get_source_data.zip(nn.bd.get_source_data).foreach({case(a, b) => b := BoringUtils.bore(a)})
     }
     node
   }
