@@ -133,91 +133,97 @@ object MBISTPipeline {
     })
     fileHandle.close()
   }
+
+  def PlaceMbistPipeline(level:Int, moduleName:String = s"MBISTPipeline_${uniqueId}", place:Boolean = true): Option[MBISTPipeline] = {
+    val prefix = "MBISTPipeline_" + uniqueId + "_"
+    if(place){
+      val thisNode = MBIST.addController(prefix, level)
+      uniqueId += 1
+      Some(new MBISTPipeline(level, moduleName, thisNode))
+    } else {
+      None
+    }
+  }
 }
 
-class MBISTPipeline(level: Int,moduleName:String = s"MBISTPipeline_${uniqueId}") extends Module {
-
+class MBISTPipeline(level: Int,moduleName:String = s"MBISTPipeline_${uniqueId}", myNode:PipelineBaseNode) extends Module {
   override val desiredName = moduleName
-  val prefix = "MBISTPipeline_" + uniqueId + "_"
-  uniqueId += 1
-  val node = MBIST.addController(prefix, level)
-  val bd = node.bd
-
   def genCSV(intf:InterfaceInfo, csvName:String):Unit = {
     println(s"Generating ${csvName}.csv")
-    generateCSV(intf,node,csvName)
+    generateCSV(intf,myNode,csvName)
   }
 
   if(MBIST.isMaxLevel(level)) {
     //Within every mbist domain, sram arrays are indexed from 0
     SRAMTemplate.restartIndexing()
   }
+  val nodeParams = myNode.bd.params
+  val childrenIds = myNode.children.flatMap(_.array_id)
 
+  private val pipelineNodes = myNode.children.filter(_.isInstanceOf[PipelineBaseNode]).map(_.asInstanceOf[PipelineBaseNode])
+  private val ramNodes = myNode.children.filter(_.isInstanceOf[RAMBaseNode]).map(_.asInstanceOf[RAMBaseNode])
 
-  val io = IO(new Bundle() {
-    val mbist = if(MBIST.isMaxLevel(level)) Some(new MBISTBus(bd.params)) else None
+  val mbist = IO(new MBISTBus(myNode.bd.params))
+  val toNextPipeline = pipelineNodes.map(_.bd.params).map(IO(Flipped(new MBISTBus(_))))
+  val toSRAM = ramNodes.map(_.bd.params).map(IO(Flipped(new RAM2MBIST(_))))
+
+  mbist <> myNode.bd
+  toNextPipeline.zip(pipelineNodes).foreach({case(a, b) => a <> b.bd})
+  toSRAM.zip(pipelineNodes).foreach({case(a, b) => a <> b.bd})
+
+  private val arrayHit = ParallelOR(myNode.array_id.map(_.U === mbist.mbist_array))
+  private val activated = mbist.mbist_all | (mbist.mbist_req & arrayHit)
+
+  private val pipelineNodesAck= if(pipelineNodes.nonEmpty) ParallelOR(pipelineNodes.map(_.bd.mbist_ack)) else true.B
+  private val activatedReg    =   RegNext(activated)
+
+  private val arrayReg        =   RegEnable(mbist.mbist_array,0.U,activated)
+  private val reqReg          =   RegNext(mbist.mbist_req,0.U)
+  private val allReg          =   RegEnable(mbist.mbist_all,false.B,activated)
+  mbist.mbist_ack     :=  reqReg & pipelineNodesAck
+
+  private val wenReg          =   RegEnable(mbist.mbist_writeen,0.U,activated)
+  private val beReg           =   RegEnable(mbist.mbist_be,0.U,activated)
+  private val addrReg         =   RegEnable(mbist.mbist_addr,0.U,activated)
+  private val dataInReg       =   RegEnable(mbist.mbist_indata,0.U,activated)
+
+  private val renReg       =   RegEnable(mbist.mbist_readen,0.U,activated)
+  private val addrRdReg       =   RegEnable(mbist.mbist_addr_rd,0.U,activated)
+
+  private val pipelineDataOut = Wire(Vec(toNextPipeline.length, mbist.mbist_outdata.cloneType))
+  private val sramDataOut = Wire(Vec(toSRAM.length, mbist.mbist_outdata.cloneType))
+  val pipelineDataOutReg =   RegEnable(ParallelOR(pipelineDataOut :+ 0.U), activated)
+  val sramDataOutReg     =   ParallelOR(sramDataOut :+ 0.U)
+
+  mbist.mbist_outdata    :=  sramDataOutReg | pipelineDataOutReg
+
+  ramNodes.zip(toSRAM).zip(sramDataOut).foreach({
+    case((child, bd), dout) =>
+      val selectedVec = child.array_id.map(_.U === arrayReg || allReg)
+      val selected = selectedVec.reduce(_||_)
+      bd.addr := Mux(selected, addrReg(child.bd.params.addrWidth - 1, 0), 0.U)
+      bd.addr_rd := Mux(selected, addrRdReg(child.bd.params.addrWidth - 1, 0), 0.U)
+      bd.wdata := dataInReg(child.bd.params.dataWidth - 1, 0)
+      bd.re := Mux(selected, renReg, 0.U)
+      bd.we := Mux(selected, wenReg, 0.U)
+      bd.wmask := beReg(child.bd.params.maskWidth - 1, 0)
+      bd.ack := reqReg
+      bd.selectedOH := Mux(reqReg(0).asBool, Cat(selectedVec.reverse), ~0.U(child.bd.selectedOH.getWidth.W))
+      bd.array := arrayReg
+      dout := Mux(selected, bd.rdata, 0.U)
   })
-
-  if(io.mbist.isDefined) {
-    io.mbist.get <> bd
-  }
-
-  val arrayHit = ParallelOR(node.array_id.map(_.U === bd.mbist_array))
-  val activated = bd.mbist_all | (bd.mbist_req & arrayHit)
-
-  val pipelineNodes   = node.children.filter(_.isInstanceOf[PipelineBaseNode]).map(_.asInstanceOf[PipelineBaseNode])
-  val pipelineNodesAck= if(pipelineNodes.nonEmpty) ParallelOR(pipelineNodes.map(_.bd.mbist_ack)) else true.B
-  val activatedReg    =   RegNext(activated)
-
-  val arrayReg        =   RegEnable(bd.mbist_array,0.U,activated)
-  val reqReg          =   RegNext(bd.mbist_req,0.U)
-  val allReg          =   RegEnable(bd.mbist_all,0.U,activated)
-  bd.mbist_ack        :=  reqReg & pipelineNodesAck
-
-  val wenReg          =   RegEnable(bd.mbist_writeen,0.U,activated)
-  val beReg           =   RegEnable(bd.mbist_be,0.U,activated)
-  val addrReg         =   RegEnable(bd.mbist_addr,0.U,activated)
-  val dataInReg       =   RegEnable(bd.mbist_indata,0.U,activated)
-
-  val renReg       =   RegEnable(bd.mbist_readen,0.U,activated)
-  val addrRdReg       =   RegEnable(bd.mbist_addr_rd,0.U,activated)
-
-  val nodeSelected    =   node.children.map(_.array_id).map(ids => ids.map(_.U === arrayReg | allReg(0).asBool))
-
-
-  val dataOut         =   Wire(Vec(node.children.length,UInt(node.bd.params.dataWidth.W)))
-  val pipelineDataOut =   RegEnable(ParallelOR(node.children.zip(dataOut).filter(_._1.isInstanceOf[PipelineBaseNode]).map(_._2) :+ 0.U),activated)
-  val sramDataOut     =   ParallelOR(node.children.zip(dataOut).filter(_._1.isInstanceOf[RAMBaseNode]).map(_._2) :+ 0.U)
-
-  bd.mbist_outdata    :=  sramDataOut | pipelineDataOut
-
-  node.children.zip(nodeSelected).zip(dataOut).foreach({
-    case ((child:RAMBaseNode,selectedVec),dout) => {
-      val selected = ParallelOR(selectedVec)
-      child.bd.addr           := Mux(selected,addrReg(child.bd.params.addrWidth-1,0),0.U)
-      child.bd.addr_rd        := Mux(selected,addrRdReg(child.bd.params.addrWidth-1,0),0.U)
-      child.bd.wdata          := dataInReg(child.bd.params.dataWidth-1,0)
-      child.bd.re             := Mux(selected,renReg,0.U)
-      child.bd.we             := Mux(selected,wenReg,0.U)
-      child.bd.wmask          := beReg(child.bd.params.maskWidth-1,0)
-      child.bd.ack            := reqReg
-      child.bd.selectedOH     := Mux(reqReg(0).asBool,selectedVec.map(_.asUInt).reverse.reduce(Cat(_,_)),~0.U(child.bd.selectedOH.getWidth.W))
-      child.bd.array          := arrayReg
-      dout                    := Mux(selected,child.bd.rdata,0.U)
-    }
-    case ((child:PipelineBaseNode,selectedVec),dout) => {
-      val selected = ParallelOR(selectedVec)
-      child.bd.mbist_array   := Mux(selected,arrayReg(child.bd.params.arrayWidth-1,0),0.U)
-      child.bd.mbist_req     := reqReg
-      child.bd.mbist_all     := Mux(selected,allReg,0.U)
-      child.bd.mbist_writeen := Mux(selected,wenReg,0.U)
-      child.bd.mbist_be      := beReg(child.bd.params.maskWidth-1,0)
-      child.bd.mbist_addr    := Mux(selected,addrReg(child.bd.params.addrWidth-1,0),0.U)
-      child.bd.mbist_indata  := dataInReg(child.bd.params.dataWidth-1,0)
-      child.bd.mbist_readen  := Mux(selected,renReg,0.U)
-      child.bd.mbist_addr_rd := Mux(selected,addrRdReg(child.bd.params.addrWidth-1,0),0.U)
-      dout                   := Mux(selected,child.bd.mbist_outdata,0.U)
-    }
+  pipelineNodes.zip(toNextPipeline).zip(pipelineDataOut).foreach({
+    case ((child, bd), dout) =>
+      val selected = child.array_id.map(_.U === arrayReg || allReg).reduce(_||_)
+      bd.mbist_array := Mux(selected, arrayReg(child.bd.params.arrayWidth - 1, 0), 0.U)
+      bd.mbist_req := reqReg
+      bd.mbist_all := Mux(selected, allReg, 0.U)
+      bd.mbist_writeen := Mux(selected, wenReg, 0.U)
+      bd.mbist_be := beReg(child.bd.params.maskWidth - 1, 0)
+      bd.mbist_addr := Mux(selected, addrReg(child.bd.params.addrWidth - 1, 0), 0.U)
+      bd.mbist_indata := dataInReg(child.bd.params.dataWidth - 1, 0)
+      bd.mbist_readen := Mux(selected, renReg, 0.U)
+      bd.mbist_addr_rd := Mux(selected, addrRdReg(child.bd.params.addrWidth - 1, 0), 0.U)
+      dout := Mux(selected, bd.mbist_outdata, 0.U)
   })
-  MBIST.noDedup(this)
 }

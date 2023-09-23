@@ -19,6 +19,7 @@ package xs.utils.mbist
 
 import chisel3._
 import chisel3.experimental.ChiselAnnotation
+import chisel3.util.experimental.BoringUtils
 import firrtl.annotations.Annotation
 import firrtl.transforms.NoDedupAnnotation
 
@@ -95,8 +96,6 @@ object MBIST {
   def addRamNode(bd: RAM2MBIST, prefix: String, ids:Seq[Int]): RAMBaseNode = {
     val node = new SRAMNode (bd, prefix, ids)
     globalNodes = globalNodes :+ node
-    bd.source_elms.foreach(e => bd.elm_add_source(e, prefix))
-    bd.sink_elms.foreach(e => bd.elm_add_sink(e, prefix))
     node
   }
 
@@ -114,15 +113,12 @@ object MBIST {
     val ids = children.flatMap(_.array_id)
     val depth = children.flatMap(_.array_depth.map(_ + 1))
     val node = new PipelineNodeSRAM (bd, prefix, level,ids,depth)
-
     node.children = children.map {
       case ram: RAMBaseNode =>
-        val childBd = Wire(ram.bd.cloneType)
-        childBd := DontCare
+        val childBd = Wire(Flipped(ram.bd.cloneType))
         new SRAMNode (childBd, ram.prefix, ram.array_id)
       case pl: PipelineBaseNode =>
-        val childBd = Wire(pl.bd.cloneType)
-        childBd := DontCare
+        val childBd = Wire(Flipped(pl.bd.cloneType))
         new PipelineNodeSRAM (childBd, pl.prefix, pl.level,pl.array_id,pl.array_depth)
     }
     node.ramParamsBelongToThis = children.flatMap ({
@@ -132,13 +128,10 @@ object MBIST {
         pl.ramParamsBelongToThis
     })
     globalNodes = remain :+ node
-    for(c <- node.children){
-      c.bd.source_elms.foreach(src => c.bd.elm_add_sink(src, c.prefix))
-      c.bd.sink_elms.foreach(sink => c.bd.elm_add_source(sink, c.prefix))
-    }
-    if(!isMaxLevel(level)){
-      bd.source_elms.foreach(e => bd.elm_add_source(e, prefix))
-      bd.sink_elms.foreach(e => bd.elm_add_sink(e, prefix))
+
+    for((nn, on) <- node.children.zip(children)){
+      on.bd.get_sink_data.zip(nn.bd.get_sink_data).foreach({case(a, b) => BoringUtils.rwTap(a) := b})
+      on.bd.get_source_data.zip(nn.bd.get_source_data).foreach({case(a, b) => b := BoringUtils.tap(a)})
     }
     node
   }

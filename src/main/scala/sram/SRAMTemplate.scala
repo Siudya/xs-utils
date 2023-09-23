@@ -289,7 +289,7 @@ object SRAMTemplate {
   private var nodeId = 0
   private var wrapperId = 0
   private var domainId = 0
-  private var firstToBeBroadCast = 0
+  private val broadCastBdQueue = new mutable.Queue[BroadCastBundle]
 
   def getWayNumForEachNodeAndNodeNum_1toN(dw: Int, way: Int, mw: Int): (Int, Int) = {
     val dataNum1toNNode = mw / dw
@@ -322,23 +322,14 @@ object SRAMTemplate {
   def increaseDomainID(add:Int):Unit = domainId += add
 
   def addBroadCastBundleSink(bd:BroadCastBundle):Unit = {
-    for((sigName,wires) <- bd.elements){
-      BoringUtils.addSink(wires,s"sram_${wrapperId}_${sigName}")
-    }
+    broadCastBdQueue.enqueue(bd)
   }
   def genBroadCastBundleTop():BroadCastBundle = {
-    val connectors = Seq.fill(wrapperId - firstToBeBroadCast)(Wire(new BroadCastBundle))
-    for((con,idx) <- connectors.zipWithIndex){
-      con := DontCare
-      dontTouch(con)
-      for((sigName,wires) <- con.elements){
-        BoringUtils.addSource(wires,s"sram_${idx + firstToBeBroadCast}_${sigName}")
-      }
-    }
     val res = Wire(new BroadCastBundle)
-    dontTouch(res)
-    connectors.foreach(_:=res)
-    firstToBeBroadCast = firstToBeBroadCast + connectors.length
+    broadCastBdQueue.toSeq.foreach(bd => {
+      BoringUtils.bore(bd) := res
+    })
+    broadCastBdQueue.clear()
     res
   }
 }

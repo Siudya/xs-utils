@@ -25,14 +25,8 @@ trait MBISTBundleLike {
   this: Bundle =>
   def sink_elms: Seq[String]
   def source_elms: Seq[String]
-
-  def elm_add_source(elm: String, prefix: String) = {
-    BoringUtils.addSource(elements(elm), prefix + elm)
-  }
-
-  def elm_add_sink(elm: String, prefix: String) = {
-    BoringUtils.addSink(elements(elm), prefix + elm)
-  }
+  def get_sink_data: Seq[Data] = sink_elms.map(e => elements(e))
+  def get_source_data: Seq[Data] = sink_elms.map(e => elements(e))
 }
 abstract class MBISTCommonBundle() extends Bundle with MBISTBundleLike{
   def sink_elms: Seq[String] = Seq()
