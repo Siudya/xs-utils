@@ -139,7 +139,49 @@ object MBISTPipeline {
     if(place){
       val thisNode = MBIST.addController(prefix, level)
       uniqueId += 1
-      Some(new MBISTPipeline(level, moduleName, thisNode))
+      val pipelineNodes = thisNode.children.filter(_.isInstanceOf[PipelineBaseNode]).map(_.asInstanceOf[PipelineBaseNode])
+      val ramNodes = thisNode.children.filter(_.isInstanceOf[RAMBaseNode]).map(_.asInstanceOf[RAMBaseNode])
+      val res = Module(new MBISTPipeline(level, moduleName, thisNode))
+      res.mbist.mbist_array := thisNode.bd.mbist_array
+      res.mbist.mbist_all := thisNode.bd.mbist_all
+      res.mbist.mbist_req := thisNode.bd.mbist_req
+      thisNode.bd.mbist_ack := res.mbist.mbist_ack
+      res.mbist.mbist_writeen := thisNode.bd.mbist_writeen
+      res.mbist.mbist_be := thisNode.bd.mbist_be
+      res.mbist.mbist_addr := thisNode.bd.mbist_addr
+      res.mbist.mbist_indata := thisNode.bd.mbist_indata
+      res.mbist.mbist_readen := thisNode.bd.mbist_readen
+      res.mbist.mbist_addr_rd := thisNode.bd.mbist_addr_rd
+      thisNode.bd.mbist_outdata := res.mbist.mbist_outdata
+
+      res.toNextPipeline.zip(pipelineNodes).foreach({ case (a, b) =>
+        b.bd.mbist_array := a.mbist_array
+        b.bd.mbist_all := a.mbist_all
+        b.bd.mbist_req := a.mbist_req
+        a.mbist_ack := b.bd.mbist_ack
+        b.bd.mbist_writeen := a.mbist_writeen
+        b.bd.mbist_be := a.mbist_be
+        b.bd.mbist_addr := a.mbist_addr
+        b.bd.mbist_indata := a.mbist_indata
+        b.bd.mbist_readen := a.mbist_readen
+        b.bd.mbist_addr_rd := a.mbist_addr_rd
+        a.mbist_outdata := b.bd.mbist_outdata
+      })
+
+      res.toSRAM.zip(ramNodes).foreach({ case (a, b) =>
+        b.bd.addr := a.addr
+        b.bd.addr_rd := a.addr_rd
+        b.bd.wdata := a.wdata
+        b.bd.wmask := a.wmask
+        b.bd.re := a.re
+        b.bd.we := a.we
+        b.bd.ack := a.ack
+        b.bd.selectedOH := a.selectedOH
+        b.bd.array := a.array
+        a.rdata := b.bd.rdata
+      })
+
+      Some(res)
     } else {
       None
     }
@@ -167,14 +209,10 @@ class MBISTPipeline(level: Int,moduleName:String = s"MBISTPipeline_${uniqueId}",
   val toNextPipeline = pipelineNodes.map(_.bd.params).map(new MBISTBus(_)).map(b => IO(Flipped(b)))
   val toSRAM = ramNodes.map(_.bd.params).map(new RAM2MBIST(_)).map(b => IO(Flipped(b)))
 
-  mbist <> myNode.bd
-  toNextPipeline.zip(pipelineNodes).foreach({case(a, b) => a <> b.bd})
-  toSRAM.zip(pipelineNodes).foreach({case(a, b) => a <> b.bd})
-
   private val arrayHit = ParallelOR(myNode.array_id.map(_.U === mbist.mbist_array))
   private val activated = mbist.mbist_all | (mbist.mbist_req & arrayHit)
 
-  private val pipelineNodesAck= if(pipelineNodes.nonEmpty) ParallelOR(pipelineNodes.map(_.bd.mbist_ack)) else true.B
+  private val pipelineNodesAck= if(pipelineNodes.nonEmpty) ParallelOR(toNextPipeline.map(_.mbist_ack)) else true.B
   private val activatedReg    =   RegNext(activated)
 
   private val arrayReg        =   RegEnable(mbist.mbist_array,0.U,activated)
