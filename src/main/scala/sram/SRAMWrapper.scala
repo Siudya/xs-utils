@@ -43,7 +43,7 @@ class SRAMWrapper[T <: Data]
     sram
   }
   val mbistPipeline = if(hasMbist && hasShareBus) {
-    Some(Module(new MBISTPipeline(1,s"${parentName}_mbistPipe")))
+    MBISTPipeline.PlaceMbistPipeline(1, s"${parentName}_mbistPipe")
   } else {
     None
   }

@@ -164,8 +164,8 @@ class MBISTPipeline(level: Int,moduleName:String = s"MBISTPipeline_${uniqueId}",
   private val ramNodes = myNode.children.filter(_.isInstanceOf[RAMBaseNode]).map(_.asInstanceOf[RAMBaseNode])
 
   val mbist = IO(new MBISTBus(myNode.bd.params))
-  val toNextPipeline = pipelineNodes.map(_.bd.params).map(IO(Flipped(new MBISTBus(_))))
-  val toSRAM = ramNodes.map(_.bd.params).map(IO(Flipped(new RAM2MBIST(_))))
+  val toNextPipeline = pipelineNodes.map(_.bd.params).map(new MBISTBus(_)).map(b => IO(Flipped(b)))
+  val toSRAM = ramNodes.map(_.bd.params).map(new RAM2MBIST(_)).map(b => IO(Flipped(b)))
 
   mbist <> myNode.bd
   toNextPipeline.zip(pipelineNodes).foreach({case(a, b) => a <> b.bd})
