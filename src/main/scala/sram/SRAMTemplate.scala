@@ -474,7 +474,6 @@ class SRAMTemplate[T <: Data]
       }
     }
     if (hasMbist) {
-      MBIST.noDedup(this)
       array.mbist.get.dft_ram_bp_clken := broadCastSignals.ram_bp_clken
       array.mbist.get.dft_ram_bypass := broadCastSignals.ram_bypass
     }
