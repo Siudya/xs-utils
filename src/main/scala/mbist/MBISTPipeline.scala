@@ -208,6 +208,9 @@ class MBISTPipeline(level: Int,moduleName:String = s"MBISTPipeline_${uniqueId}",
   val mbist = IO(new MBISTBus(myNode.bd.params))
   val toNextPipeline = pipelineNodes.map(_.bd.params).map(new MBISTBus(_)).map(b => IO(Flipped(b)))
   val toSRAM = ramNodes.map(_.bd.params).map(new RAM2MBIST(_)).map(b => IO(Flipped(b)))
+  dontTouch(mbist)
+  toNextPipeline.foreach(b => dontTouch(b))
+  toSRAM.foreach(b => dontTouch(b))
 
   private val arrayHit = ParallelOR(myNode.array_id.map(_.U === mbist.mbist_array))
   private val activated = mbist.mbist_all | (mbist.mbist_req & arrayHit)

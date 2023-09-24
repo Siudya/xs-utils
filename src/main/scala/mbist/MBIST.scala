@@ -110,6 +110,7 @@ object MBIST {
     val params = inferMBITSBusParams(children)
     val bd = Wire(new MBISTBus(params))
     bd := DontCare
+    dontTouch(bd)
     val ids = children.flatMap(_.array_id)
     val depth = children.flatMap(_.array_depth.map(_ + 1))
     val node = new PipelineNodeSRAM (bd, prefix, level,ids,depth)
@@ -117,10 +118,35 @@ object MBIST {
       case ram: RAMBaseNode =>
         val childBd = Wire(ram.bd.cloneType)
         childBd := DontCare
+        dontTouch(childBd)
+        val boreChildrenBd = BoringUtils.bore(ram.bd)
+        boreChildrenBd.addr := childBd.addr
+        boreChildrenBd.addr_rd := childBd.addr_rd
+        boreChildrenBd.wdata := childBd.wdata
+        boreChildrenBd.wmask := childBd.wmask
+        boreChildrenBd.re := childBd.re
+        boreChildrenBd.we := childBd.we
+        boreChildrenBd.selectedOH := childBd.selectedOH
+        boreChildrenBd.array := childBd.array
+        boreChildrenBd.ack := childBd.ack
+        childBd.rdata := boreChildrenBd.rdata
         new SRAMNode (childBd, ram.prefix, ram.array_id)
       case pl: PipelineBaseNode =>
         val childBd = Wire(pl.bd.cloneType)
         childBd := DontCare
+        dontTouch(childBd)
+        val boreChildrenBd = BoringUtils.bore(pl.bd)
+        boreChildrenBd.mbist_array := childBd.mbist_array
+        boreChildrenBd.mbist_all := childBd.mbist_all
+        boreChildrenBd.mbist_req := childBd.mbist_req
+        boreChildrenBd.mbist_writeen := childBd.mbist_writeen
+        boreChildrenBd.mbist_be := childBd.mbist_be
+        boreChildrenBd.mbist_addr := childBd.mbist_addr
+        boreChildrenBd.mbist_indata := childBd.mbist_indata
+        boreChildrenBd.mbist_readen := childBd.mbist_readen
+        boreChildrenBd.mbist_addr_rd := childBd.mbist_addr_rd
+        childBd.mbist_ack := boreChildrenBd.mbist_ack
+        childBd.mbist_outdata := boreChildrenBd.mbist_outdata
         new PipelineNodeSRAM (childBd, pl.prefix, pl.level,pl.array_id,pl.array_depth)
     }
     node.ramParamsBelongToThis = children.flatMap ({
@@ -131,10 +157,6 @@ object MBIST {
     })
     globalNodes = remain :+ node
 
-    for((nn, on) <- node.children.zip(children)){
-      on.bd.get_sink_data.zip(nn.bd.get_sink_data).foreach({case(a, b) => BoringUtils.bore(a) := b})
-      on.bd.get_source_data.zip(nn.bd.get_source_data).foreach({case(a, b) => b := BoringUtils.bore(a)})
-    }
     node
   }
 
