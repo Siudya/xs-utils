@@ -36,6 +36,7 @@ object BroadCastingUtils {
   private val broadCastMap = new mutable.HashMap[String, Seq[Data]]
 
   def AddBroadCastSink(key:String, in:Data):Unit = {
+    dontTouch(in)
     if(broadCastMap.contains(key)){
       require(broadCastMap(key).head.getWidth == in.getWidth)
       broadCastMap(key) = broadCastMap(key) :+ in
