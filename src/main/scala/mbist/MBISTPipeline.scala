@@ -57,7 +57,6 @@ class MBISTInterface(params:Seq[MBISTBusParams],ids:Seq[Seq[Int]],name:String,pi
   require(params.length == pipelineNum,s"Error @ ${name}:Params Number and pipelineNum must be the same!")
   val myMbistBusParams = MBIST.inferMBITSBusParamsFromParams(params)
   override val desiredName = name
-  MBIST.noDedup(this)
 
   val toPipeline = IO(MixedVec(Seq.tabulate(pipelineNum)(idx => Flipped(new MBISTBus(params(idx))))))
   val mbist = IO(new MbitsStandardInterface(myMbistBusParams))
