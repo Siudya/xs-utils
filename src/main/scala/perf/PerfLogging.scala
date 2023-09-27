@@ -23,10 +23,10 @@ import xs.util.perf.LogHelper
 trait HasPerfLogging {
   this: Module =>
   val p: Parameters
-  private val perfDump = Wire(Bool())
-  private val perfClean = Wire(Bool())
-  private val logEnable = Wire(Bool())
-  private val logTimestamp = Wire(UInt(64.W))
+   private val perfDump = WireInit(false.B)
+  private val perfClean = WireInit(false.B)
+  private val logEnable = WireInit(false.B)
+  private val logTimestamp = WireInit(0.U(64.W))
   private val env = p(DebugOptionsKey)
   private val perfEnable = env.EnablePerfDebug && !env.FPGAPlatform
   private val logHelper = if(perfEnable) Some(Module(new LogHelper)) else None
