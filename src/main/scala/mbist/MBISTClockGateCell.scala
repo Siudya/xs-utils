@@ -31,18 +31,16 @@ class MBISTClockGateCell extends Module{
     val readen = Input(Bool())
     val req = Input(Bool())
   })
+  val E  = IO(Input(Bool()))
   val dft = IO(new CGBroadcastSignals)
   val out_clock = IO(Output(Clock()))
 
-  val cg_en_reg = RegInit(false.B)
-  cg_en_reg := !cg_en_reg
-
-  val E = Mux(mbist.req, mbist.readen | mbist.writeen, cg_en_reg)
-  val TE = dft.cgen
+  private val _E = Mux(mbist.req, mbist.readen | mbist.writeen, E)
+  private val _TE = dft.cgen
 
   val CG = Module(new STD_CLKGT_func)
-  CG.io.E := E
-  CG.io.TE := TE
+  CG.io.E := _E
+  CG.io.TE := _TE
   CG.io.CK := clock
   out_clock := CG.io.Q
   CG.io.dft_l3dataram_clk := dft.l3dataram_clk

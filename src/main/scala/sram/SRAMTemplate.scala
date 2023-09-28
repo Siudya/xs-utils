@@ -24,9 +24,12 @@ import chisel3._
 import chisel3.experimental.hierarchy.{Definition, Instance, instantiable, public}
 import chisel3.util._
 import chisel3.util.experimental.BoringUtils
+import org.chipsalliance.cde.config.Parameters
 import xs.utils.mbist._
+import xs.utils.perf.DebugOptionsKey
 import xs.utils.sram.SRAMTemplate.{nodeId, wrapperId}
-import xs.utils.{CustomAnnotations, HoldUnless, LFSR64, ParallelMux}
+import xs.utils.{HoldUnless, LFSR64, ParallelMux}
+
 import scala.collection.mutable
 import scala.math.sqrt
 
@@ -116,11 +119,9 @@ class SRAMArray1P(depth: Int, width: Int, maskSegments: Int, hasMbist: Boolean, 
 }
 
 @instantiable
-class SRAMArray2P(depth: Int, width: Int, maskSegments: Int, hasMbist: Boolean, sramName: Option[String] = None, selectedLen:Int)
+class SRAMArray2P(depth: Int, width: Int, maskSegments: Int, hasMbist: Boolean, sramName: Option[String] = None, selectedLen:Int, multicycle:Boolean)
   extends SRAMArray(depth, width, maskSegments, hasMbist, sramName, selectedLen, false)  {
   require(width % maskSegments == 0)
-
-
 
   // read: rdata will keep stable until the next read enable.
   val ram = Seq.fill(maskSegments)(Mem(depth, UInt((width / maskSegments).W)))
@@ -347,7 +348,7 @@ class SRAMTemplate[T <: Data]
   hasMbist: Boolean = false, hasShareBus: Boolean = false,
   maxMbistDataWidth: Int = 256, parentName:String = s"Unknown",
   foundry:String = "Unkown", sramInst:String = "STANDARD"
-  ) extends Module {
+  )(implicit p:Parameters) extends Module {
 
   val io = IO(new Bundle {
     val r = Flipped(new SRAMReadBus(gen, set, way))
@@ -363,15 +364,6 @@ class SRAMTemplate[T <: Data]
   dontTouch(broadCastSignals)
   if(hasMbist) SRAMTemplate.addBroadCastBundleSink(broadCastSignals)
   wrapperId += 1
-
-  val mbistClkGate = if(clk_div_by_2) Some(Module(new MBISTClockGateCell)) else None
-  if(clk_div_by_2){
-    mbistClkGate.get.clock := clock
-    mbistClkGate.get.reset := reset
-    mbistClkGate.get.dft.cgen := broadCastSignals.cgen
-    mbistClkGate.get.dft.l3dataram_clk := broadCastSignals.l3dataram_clk
-    mbistClkGate.get.dft.l3dataramclk_bypass := broadCastSignals.l3dataramclk_bypass
-  }
 
   withClockAndReset(clock, reset) {
     val (resetState, resetSet) = (WireInit(false.B), WireInit(0.U))
@@ -394,19 +386,19 @@ class SRAMTemplate[T <: Data]
     val needBypass = io.w.req.valid && io.r.req.valid && (io.w.req.bits.setIdx === io.r.req.bits.setIdx)
     val ren = if (implementSinglePort) io.r.req.valid else (!needBypass) & io.r.req.valid
     val wen = io.w.req.valid || resetState
+    require(!(clk_div_by_2 && shouldReset), "Multi cycle SRAM can not be reset!")
 
-    val clkGate = if (hasClkGate) Some(Module(new STD_CLKGT_func)) else None
+    val mbistClkGate = if (hasClkGate) Some(Module(new MBISTClockGateCell)) else None
     if (hasClkGate) {
-      clkGate.get.io.TE := false.B
-      clkGate.get.io.E := ren || wen
-      clkGate.get.io.CK := clock
-      clkGate.get.io.dft_l3dataram_clk := DontCare
-      clkGate.get.io.dft_l3dataramclk_bypass := DontCare
+      mbistClkGate.get.clock := clock
+      mbistClkGate.get.reset := reset
+      mbistClkGate.get.E := ren || wen
+      mbistClkGate.get.dft.cgen := broadCastSignals.cgen
+      mbistClkGate.get.dft.l3dataram_clk := broadCastSignals.l3dataram_clk
+      mbistClkGate.get.dft.l3dataramclk_bypass := broadCastSignals.l3dataramclk_bypass
     }
-    val master_clock = if (clk_div_by_2) {
+    val master_clock = if (hasClkGate) {
       mbistClkGate.get.out_clock
-    } else if (hasClkGate) {
-      clkGate.get.io.Q
     } else {
       clock
     }
@@ -435,6 +427,9 @@ class SRAMTemplate[T <: Data]
     val sram_prefix = "sram_" + nodeId + "_"
     val myMbistBundle = Wire(new RAM2MBIST(myNodeParam))
     myMbistBundle := DontCare
+    myMbistBundle.ack := false.B
+    myMbistBundle.we := false.B
+    myMbistBundle.re := false.B
     if (hasMbist && hasShareBus) {
       dontTouch(myMbistBundle)
     }
@@ -451,24 +446,18 @@ class SRAMTemplate[T <: Data]
     val mbistFuncSel = myMbistBundle.ack
     /** ***************************************************************************************** */
     val wordType = UInt(gen.getWidth.W)
-
+    if (hasClkGate) {
+      mbistClkGate.get.mbist.req := myMbistBundle.ack
+      mbistClkGate.get.mbist.writeen := myMbistBundle.we
+      mbistClkGate.get.mbist.readen := myMbistBundle.re
+    }
     if (hasMbist && hasShareBus) {
       MBIST.addRamNode(myMbistBundle, sram_prefix, myArrayIds)
-      if (clk_div_by_2) {
-        mbistClkGate.get.mbist.req := myMbistBundle.ack
-        mbistClkGate.get.mbist.writeen := myMbistBundle.we
-        mbistClkGate.get.mbist.readen := myMbistBundle.re
-      }
       val addId = if (isNto1) mbistNodeNumNto1 else mbistNodeNum1toN
       nodeId += addId
       SRAMTemplate.increaseDomainID(addId)
       array.mbist.get.selectedOH := Mux(broadCastSignals.ram_hold, 0.U, myMbistBundle.selectedOH)
     } else {
-      if (clk_div_by_2) {
-        mbistClkGate.get.mbist.req := false.B
-        mbistClkGate.get.mbist.writeen := false.B
-        mbistClkGate.get.mbist.readen := false.B
-      }
       if(hasMbist){
         array.mbist.get.selectedOH := DontCare
       }
@@ -533,21 +522,11 @@ class SRAMTemplate[T <: Data]
     }
 
     // hold read data for SRAMs
-    val rdata =
-      if (clk_div_by_2) {
-        mem_rdata
-      } else if (holdRead) {
+    val rdata = if (holdRead) {
         HoldUnless(mem_rdata, RegNext(toSRAMRen))
       } else {
         mem_rdata
       }
-
-    if (clk_div_by_2) {
-      CustomAnnotations.annotateClkDivBy2(this)
-    }
-    if (!isPow2(set)) {
-      CustomAnnotations.annotateSpecialDepth(this)
-    }
 
     io.r.resp.data := rdata.map(_.asTypeOf(gen))
     io.r.req.ready := !resetState && (if (implementSinglePort) !wen else true.B)
@@ -555,7 +534,12 @@ class SRAMTemplate[T <: Data]
 
     /** ***********************************mbist rdata output************************************************* */
     val nodeSelected = myArrayIds.map(_.U === mbistArray)
-    val rdataInUIntHold = RegEnable(rdata.asUInt, 0.U, mbistSelected(0) && RegNext(toSRAMRen | needBypass, false.B))
+    val rdataLatchEn = if(clk_div_by_2){
+      RegNext(toSRAMRen | needBypass, false.B)
+    } else {
+      toSRAMRen | needBypass
+    }
+    val rdataInUIntHold = RegEnable(rdata.asUInt, 0.U, mbistSelected(0) && RegNext(rdataLatchEn, false.B))
     val rdataFitToNodes = Seq.tabulate(myNodeNum)(idx => {
       val highIdx = Seq(idx * myDataWidth + myDataWidth - 1, rdata.getWidth - 1).min
       rdataInUIntHold(highIdx, idx * myDataWidth)
@@ -563,6 +547,15 @@ class SRAMTemplate[T <: Data]
     myMbistBundle.rdata := ParallelMux(nodeSelected zip rdataFitToNodes)
 
     /** ****************************************************************************************************** */
+
+    if(clk_div_by_2){
+      val lastCycleHasReq = RegNext(toSRAMRen | finalWen, false.B)
+      when(lastCycleHasReq){assert(!(toSRAMRen | finalWen), "Multicycle SRAM can not accept back-to-back requests!")}
+    }
+    if(!p(DebugOptionsKey).FPGAPlatform && clk_div_by_2){
+      val rawReadData = rdata.map(_.asTypeOf(gen))
+      io.r.resp.data.zip(rawReadData).foreach({case(a, b) => a := RegNext(b)})
+    }
   }
 }
 
@@ -572,7 +565,7 @@ class FoldedSRAMTemplate[T <: Data]
   shouldReset: Boolean = false, extraReset: Boolean = false,
   holdRead: Boolean = false, singlePort: Boolean = false, bypassWrite: Boolean = false,
   hasMbist:Boolean = true, hasShareBus:Boolean = false, parentName:String = "Unknown"
-) extends Module {
+)(implicit p:Parameters) extends Module {
   val io = IO(new Bundle {
     val r = Flipped(new SRAMReadBus(gen, set, way))
     val w = Flipped(new SRAMWriteBus(gen, set, way))
