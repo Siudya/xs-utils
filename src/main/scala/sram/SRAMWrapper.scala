@@ -3,6 +3,7 @@ package xs.utils.sram
 import chisel3._
 import chisel3.util._
 import freechips.rocketchip.util.Pow2ClockDivider
+import org.chipsalliance.cde.config.Parameters
 import xs.utils.mbist.{MBISTClockGateCell, MBISTPipeline}
 
 class SRAMWrapper[T <: Data]
@@ -12,7 +13,7 @@ class SRAMWrapper[T <: Data]
   hasMbist:Boolean = true,
   hasShareBus:Boolean = false,
   parentName:String = "unknown"
-) extends Module {
+)(implicit p:Parameters) extends Module {
 
   val io = IO(new Bundle() {
     val r = Flipped(new SRAMReadBus(gen, set, 1))

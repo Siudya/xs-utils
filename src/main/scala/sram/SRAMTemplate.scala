@@ -119,7 +119,7 @@ class SRAMArray1P(depth: Int, width: Int, maskSegments: Int, hasMbist: Boolean, 
 }
 
 @instantiable
-class SRAMArray2P(depth: Int, width: Int, maskSegments: Int, hasMbist: Boolean, sramName: Option[String] = None, selectedLen:Int, multicycle:Boolean)
+class SRAMArray2P(depth: Int, width: Int, maskSegments: Int, hasMbist: Boolean, sramName: Option[String] = None, selectedLen:Int)
   extends SRAMArray(depth, width, maskSegments, hasMbist, sramName, selectedLen, false)  {
   require(width % maskSegments == 0)
 
