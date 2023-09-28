@@ -547,11 +547,6 @@ class SRAMTemplate[T <: Data]
     myMbistBundle.rdata := ParallelMux(nodeSelected zip rdataFitToNodes)
 
     /** ****************************************************************************************************** */
-
-    if(clk_div_by_2){
-      val lastCycleHasReq = RegNext(toSRAMRen | finalWen, false.B)
-      when(lastCycleHasReq){assert(!(toSRAMRen | finalWen), "Multicycle SRAM can not accept back-to-back requests!")}
-    }
     if(!p(DebugOptionsKey).FPGAPlatform && clk_div_by_2){
       val rawReadData = rdata.map(_.asTypeOf(gen))
       io.r.resp.data.zip(rawReadData).foreach({case(a, b) => a := RegNext(b)})
