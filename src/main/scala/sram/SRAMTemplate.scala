@@ -385,18 +385,10 @@ class SRAMTemplate[T <: Data]
 
     val needBypass = io.w.req.valid && io.r.req.valid && (io.w.req.bits.setIdx === io.r.req.bits.setIdx)
     val ren = if (implementSinglePort) io.r.req.valid else (!needBypass) & io.r.req.valid
-    val wen = io.w.req.valid || resetState
+    val wen = io.w.req.valid || (resetState && !reset.asBool)
     require(!(clk_div_by_2 && shouldReset), "Multi cycle SRAM can not be reset!")
 
     val mbistClkGate = if (hasClkGate) Some(Module(new MBISTClockGateCell)) else None
-    if (hasClkGate) {
-      mbistClkGate.get.clock := clock
-      mbistClkGate.get.reset := reset
-      mbistClkGate.get.E := ren || wen
-      mbistClkGate.get.dft.cgen := broadCastSignals.cgen
-      mbistClkGate.get.dft.l3dataram_clk := broadCastSignals.l3dataram_clk
-      mbistClkGate.get.dft.l3dataramclk_bypass := broadCastSignals.l3dataramclk_bypass
-    }
     val master_clock = if (hasClkGate) {
       mbistClkGate.get.out_clock
     } else {
@@ -485,6 +477,15 @@ class SRAMTemplate[T <: Data]
     val finalWriteData = if (hasMbist && hasShareBus) Mux(mbistFuncSel, mbistWriteData.asTypeOf(wdata), wdata) else wdata
 
     val toSRAMRen = if (implementSinglePort) (finalRen && !finalWen) else finalRen
+
+    if (hasClkGate) {
+      mbistClkGate.get.clock := clock
+      mbistClkGate.get.reset := reset
+      mbistClkGate.get.E := finalWen || toSRAMRen
+      mbistClkGate.get.dft.cgen := broadCastSignals.cgen
+      mbistClkGate.get.dft.l3dataram_clk := broadCastSignals.l3dataram_clk
+      mbistClkGate.get.dft.l3dataramclk_bypass := broadCastSignals.l3dataramclk_bypass
+    }
 
     val raw_rdata = SRAMArray.read(array, implementSinglePort, finalReadSetIdx, toSRAMRen).asTypeOf(Vec(way, wordType))
     when(finalWen) {
