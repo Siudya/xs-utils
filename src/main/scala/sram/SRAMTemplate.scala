@@ -549,6 +549,7 @@ class SRAMTemplate[T <: Data]
 
     /** ****************************************************************************************************** */
     if(!p(DebugOptionsKey).FPGAPlatform && clk_div_by_2){
+      println("[WARNING]: Delay SRAM output for 1 cycle in half freq SRAM, DO NOT SYTHESIS THIS! DOUBLE CHECK THE CONFIG!")
       val rawReadData = rdata.map(_.asTypeOf(gen))
       io.r.resp.data.zip(rawReadData).foreach({case(a, b) => a := RegNext(b)})
     }
