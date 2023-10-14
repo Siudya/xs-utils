@@ -388,8 +388,8 @@ class SRAMTemplate[T <: Data]
     val wen = io.w.req.valid || (resetState && !reset.asBool)
     require(!(clk_div_by_2 && shouldReset), "Multi cycle SRAM can not be reset!")
 
-    val mbistClkGate = if (hasClkGate) Some(Module(new MBISTClockGateCell)) else None
-    val master_clock = if (hasClkGate) {
+    val mbistClkGate = if (hasClkGate || clk_div_by_2) Some(Module(new MBISTClockGateCell)) else None
+    val master_clock = if (hasClkGate || clk_div_by_2) {
       mbistClkGate.get.out_clock
     } else {
       clock
@@ -438,7 +438,7 @@ class SRAMTemplate[T <: Data]
     val mbistFuncSel = myMbistBundle.ack
     /** ***************************************************************************************** */
     val wordType = UInt(gen.getWidth.W)
-    if (hasClkGate) {
+    if (hasClkGate || clk_div_by_2) {
       mbistClkGate.get.mbist.req := myMbistBundle.ack
       mbistClkGate.get.mbist.writeen := myMbistBundle.we
       mbistClkGate.get.mbist.readen := myMbistBundle.re
@@ -478,7 +478,7 @@ class SRAMTemplate[T <: Data]
 
     val toSRAMRen = if (implementSinglePort) (finalRen && !finalWen) else finalRen
 
-    if (hasClkGate) {
+    if (hasClkGate || clk_div_by_2) {
       mbistClkGate.get.clock := clock
       mbistClkGate.get.reset := reset
       mbistClkGate.get.E := finalWen || toSRAMRen
