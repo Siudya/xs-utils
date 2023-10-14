@@ -360,7 +360,7 @@ class SRAMTemplate[T <: Data]
   val isBypassWriteLegal = if(implementSinglePort) true else bypassWrite
   require(isBypassWriteLegal, "Dual port SRAM MUST implement bypass write!")
 
-  broadCastSignals := DontCare
+  broadCastSignals := 0.U.asTypeOf(new BroadCastBundle)
   dontTouch(broadCastSignals)
   if(hasMbist) SRAMTemplate.addBroadCastBundleSink(broadCastSignals)
   wrapperId += 1
