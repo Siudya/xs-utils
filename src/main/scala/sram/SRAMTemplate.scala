@@ -477,11 +477,21 @@ class SRAMTemplate[T <: Data]
     val finalWriteData = if (hasMbist && hasShareBus) Mux(mbistFuncSel, mbistWriteData.asTypeOf(wdata), wdata) else wdata
 
     val toSRAMRen = if (implementSinglePort) (finalRen && !finalWen) else finalRen
-
+    val lastCycleHasReq = RegInit(false.B)
+    when(lastCycleHasReq){
+      lastCycleHasReq := false.B
+    }.elsewhen(finalWen || toSRAMRen) {
+      lastCycleHasReq := true.B
+    }
+    val _E = if (clk_div_by_2) {
+      (finalWen || toSRAMRen) & !lastCycleHasReq
+    } else {
+      finalWen || toSRAMRen
+    }
     if (hasClkGate || clk_div_by_2) {
       mbistClkGate.get.clock := clock
       mbistClkGate.get.reset := reset
-      mbistClkGate.get.E := finalWen || toSRAMRen
+      mbistClkGate.get.E := _E
       mbistClkGate.get.dft.cgen := broadCastSignals.cgen
       mbistClkGate.get.dft.l3dataram_clk := broadCastSignals.l3dataram_clk
       mbistClkGate.get.dft.l3dataramclk_bypass := broadCastSignals.l3dataramclk_bypass
