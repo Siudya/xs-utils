@@ -81,13 +81,15 @@ case class RAM2MBISTParams
   maxArrayId:Int,
   bitWrite:Boolean,
   foundry:String,
-  sramInst:String
+  sramInst:String,
+  latency:Int = 0,
+  bankRange:String = "None"
 ) {
   val addrWidth = log2Up(set + 1)
   val arrayWidth = log2Up(maxArrayId + 1)
   def getAllNodesParams():Seq[RAM2MBISTParams] = {
     val res = Seq.tabulate(nodeNum)(idx => {
-      RAM2MBISTParams(set,dataWidth,maskWidth,singlePort,vname,hierarchyName + s"node${idx}", nodeNum, maxArrayId, bitWrite, foundry, sramInst)
+      RAM2MBISTParams(set,dataWidth,maskWidth,singlePort,vname,hierarchyName + s"node${idx}", nodeNum, maxArrayId, bitWrite, foundry, sramInst, latency, bankRange)
     })
     res
   }

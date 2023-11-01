@@ -347,7 +347,7 @@ class SRAMTemplate[T <: Data]
   // mbist support
   hasMbist: Boolean = false, hasShareBus: Boolean = false,
   maxMbistDataWidth: Int = 256, parentName:String = s"Unknown",
-  foundry:String = "Unkown", sramInst:String = "STANDARD"
+  val foundry:String = "Unkown", val sramInst:String = "STANDARD"
   )(implicit p:Parameters) extends Module {
 
   val io = IO(new Bundle {
@@ -364,6 +364,7 @@ class SRAMTemplate[T <: Data]
   dontTouch(broadCastSignals)
   if(hasMbist) SRAMTemplate.addBroadCastBundleSink(broadCastSignals)
   wrapperId += 1
+  var sramName = ""
 
   withClockAndReset(clock, reset) {
     val (resetState, resetSet) = (WireInit(false.B), WireInit(0.U))
@@ -415,10 +416,12 @@ class SRAMTemplate[T <: Data]
     val bitWrite = way != 1
     val (array, vname) = SRAMArray(master_clock, implementSinglePort, set, way * gen.getWidth, way, MCP = clk_div_by_2,
       hasMbist = hasMbist, selectedLen = if (hasMbist && hasShareBus) myNodeNum else 0)
+    sramName = vname
     val myNodeParam = RAM2MBISTParams(set, myDataWidth, myMaskWidth, implementSinglePort, vname, parentName, myNodeNum, myArrayIds.max, bitWrite, foundry, sramInst)
     val sram_prefix = "sram_" + nodeId + "_"
     val myMbistBundle = Wire(new RAM2MBIST(myNodeParam))
     myMbistBundle := DontCare
+    myMbistBundle.selectedOH := Fill(myMbistBundle.selectedOH.getWidth, 1.U(1.W))
     myMbistBundle.ack := false.B
     myMbistBundle.we := false.B
     myMbistBundle.re := false.B
