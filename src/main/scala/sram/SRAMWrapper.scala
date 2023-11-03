@@ -19,14 +19,17 @@ class SRAMWrapper[T <: Data]
     val r = Flipped(new SRAMReadBus(gen, set, 1))
     val w = Flipped(new SRAMWriteBus(gen, set, 1))
   })
+  require(set % n == 0)
+  require((1 << log2Ceil(n)) == n)
+  require((1 << log2Ceil(set)) == set)
 
   val innerSet = set / n
   val selBits = log2Ceil(n)
   val innerSetBits = log2Up(set) - selBits
-  val r_setIdx = io.r.req.bits.setIdx.head(innerSetBits)
-  val r_sel = if(n == 1) 0.U else io.r.req.bits.setIdx(selBits - 1, 0)
-  val w_setIdx = io.w.req.bits.setIdx.head(innerSetBits)
-  val w_sel = if(n == 1) 0.U else io.w.req.bits.setIdx(selBits - 1, 0)
+  val r_setIdx = io.r.req.bits.setIdx(innerSetBits - 1, 0)
+  val r_sel = if(n == 1) 0.U else io.r.req.bits.setIdx(innerSetBits + selBits - 1, innerSetBits)
+  val w_setIdx = io.w.req.bits.setIdx(innerSetBits - 1, 0)
+  val w_sel = if(n == 1) 0.U else io.w.req.bits.setIdx(innerSetBits + selBits - 1, innerSetBits)
 
   val banks = (0 until n).map{ i =>
     val ren = if(n == 1) true.B else i.U === r_sel
