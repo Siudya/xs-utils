@@ -348,7 +348,7 @@ class SRAMTemplate[T <: Data]
   hasMbist: Boolean = false, hasShareBus: Boolean = false,
   maxMbistDataWidth: Int = 256, parentName:String = s"Unknown",
   val foundry:String = "Unkown", val sramInst:String = "STANDARD"
-  )(implicit p:Parameters) extends Module {
+)(implicit p:Parameters) extends Module {
 
   val io = IO(new Bundle {
     val r = Flipped(new SRAMReadBus(gen, set, way))
@@ -415,7 +415,7 @@ class SRAMTemplate[T <: Data]
     val myArrayIds = Seq.tabulate(myNodeNum)(idx => SRAMTemplate.getDomainID() + idx)
     val bitWrite = way != 1
     val (array, vname) = SRAMArray(master_clock, implementSinglePort, set, way * gen.getWidth, way, MCP = clk_div_by_2,
-      hasMbist = hasMbist, selectedLen = if (hasMbist && hasShareBus) myNodeNum else 0)
+      hasMbist = hasMbist, selectedLen = if (hasMbist) myNodeNum else 0)
     sramName = vname
     val myNodeParam = RAM2MBISTParams(set, myDataWidth, myMaskWidth, implementSinglePort, vname, parentName, myNodeNum, myArrayIds.max, bitWrite, foundry, sramInst)
     val sram_prefix = "sram_" + nodeId + "_"
@@ -454,7 +454,7 @@ class SRAMTemplate[T <: Data]
       array.mbist.get.selectedOH := Mux(broadCastSignals.ram_hold, 0.U, myMbistBundle.selectedOH)
     } else {
       if(hasMbist){
-        array.mbist.get.selectedOH := DontCare
+        array.mbist.get.selectedOH := Mux(broadCastSignals.ram_hold, 0.U, myMbistBundle.selectedOH)
       }
     }
     if (hasMbist) {
@@ -537,10 +537,10 @@ class SRAMTemplate[T <: Data]
 
     // hold read data for SRAMs
     val rdata = if (holdRead) {
-        HoldUnless(mem_rdata, RegNext(toSRAMRen))
-      } else {
-        mem_rdata
-      }
+      HoldUnless(mem_rdata, RegNext(toSRAMRen))
+    } else {
+      mem_rdata
+    }
 
     io.r.resp.data := rdata.map(_.asTypeOf(gen))
     io.r.req.ready := !resetState && (if (implementSinglePort) !wen else true.B)
