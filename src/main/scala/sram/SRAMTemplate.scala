@@ -37,6 +37,9 @@ class SRAMMbistIO(selectedLen:Int) extends Bundle {
   val selectedOH = Input(UInt(selectedLen.W))
   val dft_ram_bypass = Input(Bool())
   val dft_ram_bp_clken = Input(Bool())
+  val rf2p_ctrl = Input(UInt(20.W))
+  val rmsp_hd_ctrl = Input(UInt(13.W))
+  val rmsp_hs_ctrl = Input(UInt(17.W))
 }
 
 class BroadCastBundle() extends Bundle {
@@ -46,6 +49,9 @@ class BroadCastBundle() extends Bundle {
   val l3dataram_clk = Input(Bool())
   val l3dataramclk_bypass = Input(Bool())
   val cgen = Input(Bool())
+  val rf2p_ctrl = Input(UInt(20.W))
+  val rmsp_hd_ctrl = Input(UInt(13.W))
+  val rmsp_hs_ctrl = Input(UInt(17.W))
 }
 
 @instantiable
@@ -460,6 +466,9 @@ class SRAMTemplate[T <: Data]
     if (hasMbist) {
       array.mbist.get.dft_ram_bp_clken := broadCastSignals.ram_bp_clken
       array.mbist.get.dft_ram_bypass := broadCastSignals.ram_bypass
+      array.mbist.get.rf2p_ctrl := broadCastSignals.rf2p_ctrl
+      array.mbist.get.rmsp_hd_ctrl := broadCastSignals.rmsp_hd_ctrl
+      array.mbist.get.rmsp_hs_ctrl := broadCastSignals.rmsp_hs_ctrl
     }
 
     val setIdx = Mux(resetState, resetSet, io.w.req.bits.setIdx)
