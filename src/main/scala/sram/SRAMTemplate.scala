@@ -37,9 +37,6 @@ class SRAMMbistIO(selectedLen:Int) extends Bundle {
   val selectedOH = Input(UInt(selectedLen.W))
   val dft_ram_bypass = Input(Bool())
   val dft_ram_bp_clken = Input(Bool())
-  val rf2p_ctrl = Input(UInt(20.W))
-  val rmsp_hd_ctrl = Input(UInt(13.W))
-  val rmsp_hs_ctrl = Input(UInt(17.W))
 }
 
 class BroadCastBundle() extends Bundle {
@@ -60,6 +57,12 @@ abstract class SRAMArray(depth: Int, width: Int, maskSegments: Int, hasMbist: Bo
   if (mbist.isDefined) {
     dontTouch(mbist.get)
   }
+  @public val rf2p_ctrl = IO(Input(UInt(20.W)))
+  @public val rmsp_hd_ctrl = IO(Input(UInt(13.W)))
+  @public val rmsp_hs_ctrl = IO(Input(UInt(17.W)))
+  dontTouch(rf2p_ctrl)
+  dontTouch(rmsp_hd_ctrl)
+  dontTouch(rmsp_hs_ctrl)
 
   @public val RW0 = if(singlePort){
     Some(IO(new Bundle() {
@@ -466,10 +469,10 @@ class SRAMTemplate[T <: Data]
     if (hasMbist) {
       array.mbist.get.dft_ram_bp_clken := broadCastSignals.ram_bp_clken
       array.mbist.get.dft_ram_bypass := broadCastSignals.ram_bypass
-      array.mbist.get.rf2p_ctrl := broadCastSignals.rf2p_ctrl
-      array.mbist.get.rmsp_hd_ctrl := broadCastSignals.rmsp_hd_ctrl
-      array.mbist.get.rmsp_hs_ctrl := broadCastSignals.rmsp_hs_ctrl
     }
+    array.rf2p_ctrl := broadCastSignals.rf2p_ctrl
+    array.rmsp_hd_ctrl := broadCastSignals.rmsp_hd_ctrl
+    array.rmsp_hs_ctrl := broadCastSignals.rmsp_hs_ctrl
 
     val setIdx = Mux(resetState, resetSet, io.w.req.bits.setIdx)
     val wdata = VecInit(Mux(resetState, 0.U.asTypeOf(Vec(way, gen)), io.w.req.bits.data).map(_.asTypeOf(wordType)))
