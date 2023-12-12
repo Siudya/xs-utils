@@ -108,22 +108,26 @@ abstract class SRAMArray(depth: Int, width: Int, maskSegments: Int, hasMbist: Bo
 @instantiable
 class SRAMArray1P(depth: Int, width: Int, maskSegments: Int, hasMbist: Boolean, sramName: Option[String] = None, selectedLen:Int)
   extends SRAMArray(depth, width, maskSegments, hasMbist, sramName, selectedLen, true) {
-
-  withClock(RW0.get.clk) {
-    val ram = Seq.fill(maskSegments)(Mem(depth, UInt((width / maskSegments).W)))
-    // read: rdata will keep stable until the next read enable.
-    val RW0_ren = RW0.get.en && !RW0.get.wmode
-    val RW0_rdata = WireInit(VecInit(ram.map(_.read(RW0.get.addr))))
-    RW0.get.rdata := RegEnable(RW0_rdata.asUInt, RW0_ren)
-    // write with mask
-    val RW0_wen = RW0.get.en && RW0.get.wmode
-    val RW0_wdata = RW0.get.wdata.asTypeOf(Vec(maskSegments, UInt((width / maskSegments).W)))
-    for (i <- 0 until maskSegments) {
-      val RW0_wmask = if (maskSegments > 1) RW0.get.wmask(i) else true.B
-      when (RW0_wen && RW0_wmask) {
-        ram(i)(RW0.get.addr) := RW0_wdata(i)
-      }
-    }
+  if(maskSegments > 1) {
+    val dataType = Vec(maskSegments, UInt((width / maskSegments).W))
+    val array = SyncReadMem(depth, dataType)
+    RW0.get.rdata := array.readWrite(
+      RW0.get.addr,
+      RW0.get.wdata.asTypeOf(dataType),
+      RW0.get.wmask.asBools,
+      RW0.get.en,
+      RW0.get.wmode,
+      RW0.get.clk
+    ).asUInt
+  } else {
+    val array = SyncReadMem(depth, UInt(width.W))
+    RW0.get.rdata := array.readWrite(
+      RW0.get.addr,
+      RW0.get.wdata,
+      RW0.get.en,
+      RW0.get.wmode,
+      RW0.get.clk
+    )
   }
 }
 
@@ -132,35 +136,19 @@ class SRAMArray2P(depth: Int, width: Int, maskSegments: Int, hasMbist: Boolean, 
   extends SRAMArray(depth, width, maskSegments, hasMbist, sramName, selectedLen, false)  {
   require(width % maskSegments == 0)
 
-  // read: rdata will keep stable until the next read enable.
-  val ram = Seq.fill(maskSegments)(Mem(depth, UInt((width / maskSegments).W)))
-
-  withClock(W0.get.clk) {
-    val W0_data = W0.get.data.asTypeOf(Vec(maskSegments, UInt((width / maskSegments).W)))
-    for (i <- 0 until maskSegments) {
-      val W0_mask = if (maskSegments > 1) W0.get.mask(i) else true.B
-      when(W0.get.en && W0_mask) {
-        ram(i)(W0.get.addr) := W0_data(i)
-      }
+  if(maskSegments > 1) {
+    val dataType = Vec(maskSegments, UInt((width / maskSegments).W))
+    val array = SyncReadMem(depth, dataType, SyncReadMem.WriteFirst)
+    when(W0.get.en) {
+      array.write(W0.get.addr, W0.get.data.asTypeOf(dataType), W0.get.mask.asBools, W0.get.clk)
     }
-  }
-
-  withClock(R0.get.clk) {
-    // RW0_conflict_data will be replaced by width'x in Verilog by scripts.
-    val RW0_conflict_data = Wire(UInt((width / maskSegments).W))
-    RW0_conflict_data := ((1L << (width / maskSegments)) - 1).U
-    // DontTouch RW0_conflict_data to force Chisel not to optimize it out.
-    dontTouch(RW0_conflict_data)
-    val R0_data = VecInit((0 until maskSegments).map(i => {
-      // To align with the real memory model, R0.data should be width'x when R0 and W0 have conflicts.
-      val wmask = if (maskSegments > 1) W0.get.mask(i) else true.B
-      val RW0_conflict_REG = RegEnable(W0.get.en && wmask && R0.get.addr === W0.get.addr, R0.get.en)
-      val data_REG = RegEnable(ram(i).read(R0.get.addr), R0.get.en)
-      // The read data naturally holds when not enabled.
-      Mux(RW0_conflict_REG, RW0_conflict_data, data_REG)
-    })).asUInt
-    R0.get.data := R0_data
-    // write with mask
+    R0.get.data := array.read(R0.get.addr, R0.get.en, R0.get.clk).asUInt
+  } else {
+    val array = SyncReadMem(depth, UInt(width.W))
+    when(W0.get.en) {
+      array.write(W0.get.addr, W0.get.data, W0.get.clk)
+    }
+    R0.get.data := array.read(R0.get.addr, R0.get.en, R0.get.clk)
   }
 }
 
