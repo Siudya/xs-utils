@@ -11,5 +11,6 @@ case class DebugOptions
   EnableDebug: Boolean = false,
   EnablePerfDebug: Boolean = true,
   UseDRAMSim: Boolean = false,
-  EnableTopDown: Boolean = false
+  EnableTopDown: Boolean = false,
+  EnableChiselDB: Boolean = false
 )
