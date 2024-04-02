@@ -107,7 +107,7 @@ class SRAMQueue[T <: Data](
     )
   val deq_ptr_next = Mux(deq_ptr.value === (entries.U - 1.U), 0.U, deq_ptr.value + 1.U)
   val r_addr = WireDefault(Mux(do_deq, deq_ptr_next, deq_ptr.value))
-  io.deq.bits := sram.io.r(true.B, r_addr).resp.data(0)
+  io.deq.bits := sram.io.r(!empty | do_enq, r_addr).resp.data(0)
 
   if (flow) {
     when(io.enq.valid) { io.deq.valid := true.B }
