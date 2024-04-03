@@ -27,17 +27,19 @@ class DFTResetSignals extends Bundle{
 class ResetGen(SYNC_NUM: Int = 2) extends Module {
   val o_reset = IO(Output(AsyncReset()))
   val dft = IO(Input(new DFTResetSignals()))
-  val real_reset = Mux(dft.mode, dft.lgc_rst_n.asBool, reset.asBool).asAsyncReset
-  val sync_reset = Wire(AsyncReset())
+  val raw_reset = IO(Output(AsyncReset()))
+
+  val lgc_rst = !dft.lgc_rst_n.asBool
+  val real_reset = Mux(dft.mode, lgc_rst, reset.asBool).asAsyncReset
 
   withClockAndReset(clock, real_reset){
     val pipe_reset = RegInit(((1L << SYNC_NUM) - 1).U(SYNC_NUM.W))
     pipe_reset := Cat(pipe_reset(SYNC_NUM - 2, 0), 0.U(1.W))
-    sync_reset := pipe_reset(SYNC_NUM - 1).asAsyncReset
+    raw_reset := pipe_reset(SYNC_NUM - 1).asAsyncReset
   }
 
   // deassertion of the reset needs to be synchronized.
-  o_reset := Mux(dft.scan_mode, dft.lgc_rst_n.asBool, sync_reset.asBool).asAsyncReset
+  o_reset := Mux(dft.scan_mode, lgc_rst, raw_reset.asBool).asAsyncReset
 }
 
 trait ResetNode
