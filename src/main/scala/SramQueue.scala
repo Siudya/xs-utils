@@ -100,6 +100,7 @@ class SRAMQueue[T <: Data](
   }
 
   if(singlePort) {
+    do_flow := io.enq.fire & !temp_valid & !sram2temp & sram_empty
     sram_do_deq := (!(temp_valid | sram2temp) | io.deq.fire) & !sram_empty & !sram_do_enq
   }else{
     when(sram_do_enq | sram_do_deq | !sram_empty) { assert(temp_valid | sram2temp) }
