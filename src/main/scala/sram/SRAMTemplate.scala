@@ -368,7 +368,7 @@ class SRAMTemplate[T <: Data]
     if (shouldReset) {
       val _resetState = RegInit(true.B)
       val (_resetSet, resetFinish) = Counter(_resetState, set)
-      when(resetFinish) {
+      when(RegNext(resetFinish, false.B)) {
         _resetState := false.B
       }
       if (extra_reset.isDefined) {
@@ -380,10 +380,12 @@ class SRAMTemplate[T <: Data]
       resetState := _resetState
       resetSet := _resetSet
     }
+    val rstReg = RegInit(true.B)
+    when(rstReg) {rstReg := ~rstReg}
 
     val needBypass = io.w.req.valid && io.r.req.valid && (io.w.req.bits.setIdx === io.r.req.bits.setIdx)
     val ren = if (implementSinglePort) io.r.req.valid else (!needBypass) & io.r.req.valid
-    val wen = io.w.req.valid || (resetState && !reset.asBool)
+    val wen = io.w.req.valid || (resetState && !rstReg)
     require(!(clk_div_by_2 && shouldReset), "Multi cycle SRAM can not be reset!")
 
     val mbistClkGate = if (hasClkGate || clk_div_by_2) Some(Module(new MBISTClockGateCell)) else None
