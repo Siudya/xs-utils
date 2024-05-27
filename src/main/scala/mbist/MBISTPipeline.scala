@@ -5,7 +5,7 @@
  * XiangShan is licensed under Mulan PSL v2.
  * You can use this software according to the terms and conditions of the Mulan PSL v2.
  * You may obtain a copy of Mulan PSL v2 at:
- *          http://license.coscl.org.cn/MulanPSL2
+ * http://license.coscl.org.cn/MulanPSL2
  *
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
  * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
@@ -21,13 +21,12 @@ import chisel3._
 import chisel3.util._
 import xs.utils.mbist.MBIST._
 import xs.utils.mbist.MBISTPipeline.{generateCSV, uniqueId}
-import xs.utils.{ParallelMux, ParallelOR}
+import xs.utils.{FileRegisters, ParallelOR}
 import xs.utils.sram.SRAMTemplate
 
-import java.io.{File, IOException, PrintWriter}
-class MbitsStandardInterface(val params:MBISTBusParams) extends Bundle{
+class MbitsStandardInterface(val params: MBISTBusParams) extends Bundle {
   val array = Input(UInt(params.arrayWidth.W))
-  val all, req= Input(Bool())
+  val all, req = Input(Bool())
   val ack = Output(Bool())
   // write
   val writeen = Input(Bool())
@@ -48,13 +47,13 @@ case class InterfaceInfo
   arrayWidth: Int,
   beWidth: Int,
   hasDualPort: Boolean
-){
-  override def toString = s"$name,$addrWidth,$dataWidth,$arrayWidth,$beWidth," + (if(hasDualPort) "true" else "false")
+) {
+  override def toString = s"$name,$addrWidth,$dataWidth,$arrayWidth,$beWidth," + (if (hasDualPort) "true" else "false")
 }
 
-class MBISTInterface(params:Seq[MBISTBusParams],ids:Seq[Seq[Int]],name:String,pipelineNum:Int) extends Module{
+class MBISTInterface(params: Seq[MBISTBusParams], ids: Seq[Seq[Int]], name: String, pipelineNum: Int) extends Module {
   require(params.nonEmpty)
-  require(params.length == pipelineNum,s"Error @ ${name}:Params Number and pipelineNum must be the same!")
+  require(params.length == pipelineNum, s"Error @ ${name}:Params Number and pipelineNum must be the same!")
   val myMbistBusParams = MBIST.inferMBITSBusParamsFromParams(params)
   override val desiredName = name
 
@@ -72,7 +71,7 @@ class MBISTInterface(params:Seq[MBISTBusParams],ids:Seq[Seq[Int]],name:String,pi
   private val inData = mbist.indata
   private val re = mbist.readen
   private val addrRd = mbist.addr_rd
-  private val hit = if(params.length > 1) ids.map(item => ParallelOR(item.map(_.U === array))) else Seq(true.B)
+  private val hit = if (params.length > 1) ids.map(item => ParallelOR(item.map(_.U === array))) else Seq(true.B)
   private val outDataVec = toPipeline.map(_.mbist_outdata)
   mbist.outdata := Mux1H(hit zip outDataVec)
   private val ackVec = toPipeline.map(_.mbist_ack)
@@ -96,47 +95,37 @@ class MBISTInterface(params:Seq[MBISTBusParams],ids:Seq[Seq[Int]],name:String,pi
 
 object MBISTPipeline {
   private var uniqueId = 0
+
   protected[mbist] def generateCSV
   (
-    intfInfo:InterfaceInfo,
-    node:PipelineBaseNode,
-    infoName:String,
-  ): Unit ={
-    val file = new File(f"build/$infoName.csv")
-    if(!file.exists()){
-      try{
-        file.createNewFile()
-      }catch {
-        case ex:IOException=>
-          println("error")
-      }
-    }
+    intfInfo: InterfaceInfo,
+    node: PipelineBaseNode,
+    infoName: String,
+  ): Unit = {
+    val fileName = s"$infoName.csv"
+    var contents = "\"INTF Name\", \"INTF Addr\", \"INTF Data\", \"INTF Array\", \"INTF Be\", \"Has TpSRAM\"\n"
+    contents += intfInfo.toString + '\n'
+    contents += "\"SRAM Name\",\"SRAM Type\",\"SRAM array\",\"pipeline depth\",\"bitWrite\",\"bank addr\",\"selectOH width\",\"foundry\",\"SRAM Inst\"\n"
 
-    val fileHandle = new PrintWriter(f"build/$infoName.csv")
-    val intfHeads = "\"INTF Name\", \"INTF Addr\", \"INTF Data\", \"INTF Array\", \"INTF Be\", \"Has TpSRAM\"\n"
-    fileHandle.print(intfHeads)
-    fileHandle.print(intfInfo.toString + '\n')
-    val sramHeads = "\"SRAM Name\",\"SRAM Type\",\"SRAM array\",\"pipeline depth\",\"bitWrite\",\"bank addr\",\"selectOH width\",\"foundry\",\"SRAM Inst\"\n"
-    fileHandle.print(sramHeads)
     node.ramParamsBelongToThis.zip(node.array_id).zip(node.array_depth).foreach({
-      case ((p,id),depth) =>
-        fileHandle.print(p.hierarchyName + ",")
-        fileHandle.print(p.vname + ".v,")
-        fileHandle.print(id.toString + ",")
-        fileHandle.print((depth * 2 + p.latency).toString + ",")
-        fileHandle.print(if(p.bitWrite) "true," else "false,")
-        fileHandle.print(p.bankRange + ",")
-        fileHandle.print(p.nodeNum + ",")
-        fileHandle.print(p.foundry + ",")
-        fileHandle.print(p.sramInst)
-        fileHandle.print("\n")
+      case ((p, id), depth) =>
+        contents += p.hierarchyName + ","
+        contents += p.vname + ".v,"
+        contents += id.toString + ","
+        contents += (depth * 2 + p.latency).toString + ","
+        contents += (if (p.bitWrite) "true," else "false,")
+        contents += p.bankRange + ","
+        contents += p.nodeNum + ","
+        contents += p.foundry + ","
+        contents += p.sramInst
+        contents += "\n"
     })
-    fileHandle.close()
+    FileRegisters.add(fileName, contents)
   }
 
-  def PlaceMbistPipeline(level:Int, moduleName:String = s"MBISTPipeline_${uniqueId}", place:Boolean = true): Option[MBISTPipeline] = {
+  def PlaceMbistPipeline(level: Int, moduleName: String = s"MBISTPipeline_${uniqueId}", place: Boolean = true): Option[MBISTPipeline] = {
     val prefix = "MBISTPipeline_" + uniqueId + "_"
-    if(place){
+    if (place) {
       val thisNode = MBIST.addController(prefix, level)
       uniqueId += 1
       val pipelineNodes = thisNode.children.filter(_.isInstanceOf[PipelineBaseNode]).map(_.asInstanceOf[PipelineBaseNode])
@@ -188,14 +177,15 @@ object MBISTPipeline {
   }
 }
 
-class MBISTPipeline(level: Int,moduleName:String = s"MBISTPipeline_${uniqueId}", myNode:PipelineBaseNode) extends Module {
+class MBISTPipeline(level: Int, moduleName: String = s"MBISTPipeline_${uniqueId}", myNode: PipelineBaseNode) extends Module {
   override val desiredName = moduleName
-  def genCSV(intf:InterfaceInfo, csvName:String):Unit = {
+
+  def genCSV(intf: InterfaceInfo, csvName: String): Unit = {
     println(s"Generating ${csvName}.csv")
-    generateCSV(intf,myNode,csvName)
+    generateCSV(intf, myNode, csvName)
   }
 
-  if(MBIST.isMaxLevel(level)) {
+  if (MBIST.isMaxLevel(level)) {
     //Within every mbist domain, sram arrays are indexed from 0
     SRAMTemplate.restartIndexing()
   }
@@ -215,33 +205,32 @@ class MBISTPipeline(level: Int,moduleName:String = s"MBISTPipeline_${uniqueId}",
   private val arrayHit = ParallelOR(myNode.array_id.map(_.U === mbist.mbist_array))
   private val activated = mbist.mbist_all | (mbist.mbist_req & arrayHit)
 
-  private val pipelineNodesAck= if(pipelineNodes.nonEmpty) ParallelOR(toNextPipeline.map(_.mbist_ack)) else true.B
-  private val activatedReg    =   RegNext(activated)
+  private val pipelineNodesAck = if (pipelineNodes.nonEmpty) ParallelOR(toNextPipeline.map(_.mbist_ack)) else true.B
 
-  private val arrayReg        =   RegEnable(mbist.mbist_array,0.U,activated)
-  private val reqReg          =   RegNext(mbist.mbist_req,0.U)
-  private val allReg          =   RegEnable(mbist.mbist_all,false.B,activated)
-  mbist.mbist_ack     :=  reqReg & pipelineNodesAck
+  private val arrayReg = RegEnable(mbist.mbist_array, 0.U, activated)
+  private val reqReg = RegNext(mbist.mbist_req, 0.U)
+  private val allReg = RegEnable(mbist.mbist_all, false.B, activated)
+  mbist.mbist_ack := reqReg & pipelineNodesAck
 
-  private val wenReg          =   RegEnable(mbist.mbist_writeen,0.U,activated)
-  private val beReg           =   RegEnable(mbist.mbist_be,0.U,activated)
-  private val addrReg         =   RegEnable(mbist.mbist_addr,0.U,activated)
-  private val dataInReg       =   RegEnable(mbist.mbist_indata,0.U,activated)
+  private val wenReg = RegEnable(mbist.mbist_writeen, 0.U, activated)
+  private val beReg = RegEnable(mbist.mbist_be, 0.U, activated)
+  private val addrReg = RegEnable(mbist.mbist_addr, 0.U, activated)
+  private val dataInReg = RegEnable(mbist.mbist_indata, 0.U, activated)
 
-  private val renReg       =   RegEnable(mbist.mbist_readen,0.U,activated)
-  private val addrRdReg       =   RegEnable(mbist.mbist_addr_rd,0.U,activated)
+  private val renReg = RegEnable(mbist.mbist_readen, 0.U, activated)
+  private val addrRdReg = RegEnable(mbist.mbist_addr_rd, 0.U, activated)
 
   private val pipelineDataOut = Wire(Vec(toNextPipeline.length, mbist.mbist_outdata.cloneType))
   private val sramDataOut = Wire(Vec(toSRAM.length, mbist.mbist_outdata.cloneType))
-  val pipelineDataOutReg =   RegEnable(ParallelOR(pipelineDataOut :+ 0.U), activated)
-  val sramDataOutReg     =   ParallelOR(sramDataOut :+ 0.U)
+  private val pipelineDataOutReg = RegEnable(ParallelOR(pipelineDataOut :+ 0.U), activated)
+  private val sramDataOutReg = ParallelOR(sramDataOut :+ 0.U)
 
-  mbist.mbist_outdata    :=  sramDataOutReg | pipelineDataOutReg
+  mbist.mbist_outdata := sramDataOutReg | pipelineDataOutReg
 
   ramNodes.zip(toSRAM).zip(sramDataOut).foreach({
-    case((child, bd), dout) =>
+    case ((child, bd), dout) =>
       val selectedVec = child.array_id.map(_.U === arrayReg || allReg)
-      val selected = selectedVec.reduce(_||_)
+      val selected = selectedVec.reduce(_ || _)
       bd.addr := Mux(selected, addrReg(child.bd.params.addrWidth - 1, 0), 0.U)
       bd.addr_rd := Mux(selected, addrRdReg(child.bd.params.addrWidth - 1, 0), 0.U)
       bd.wdata := dataInReg(child.bd.params.dataWidth - 1, 0)
@@ -255,7 +244,7 @@ class MBISTPipeline(level: Int,moduleName:String = s"MBISTPipeline_${uniqueId}",
   })
   pipelineNodes.zip(toNextPipeline).zip(pipelineDataOut).foreach({
     case ((child, bd), dout) =>
-      val selected = child.array_id.map(_.U === arrayReg || allReg).reduce(_||_)
+      val selected = child.array_id.map(_.U === arrayReg || allReg).reduce(_ || _)
       bd.mbist_array := Mux(selected, arrayReg(child.bd.params.arrayWidth - 1, 0), 0.U)
       bd.mbist_req := reqReg
       bd.mbist_all := Mux(selected, allReg, 0.U)
