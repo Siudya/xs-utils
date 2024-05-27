@@ -6,8 +6,8 @@ import $file.`rocket-chip`.hardfloat.common
 import $file.`rocket-chip`.cde.common
 
 val defaultVersions = Map(
-  "chisel" -> "5.0.0",
-  "chisel-plugin" -> "5.0.0",
+  "chisel" -> "6.1.0",
+  "chisel-plugin" -> "6.1.0",
   "chiseltest" -> "5.0.0",
   "scala" -> "2.13.10",
   "scalatest" -> "3.2.7"
@@ -45,7 +45,7 @@ trait RocketChip
 
   def chiselIvy = Some(getVersion("chisel"))
 
-  def chiselPluginIvy = Some(getVersion("chisel-plugin", cross=true))
+  def chiselPluginIvy = Some(getVersion("chisel-plugin", cross = true))
 
   def macrosModule = macros
 
@@ -83,7 +83,7 @@ trait RocketChip
 
     def chiselIvy = Some(getVersion("chisel"))
 
-    def chiselPluginIvy = Some(getVersion("chisel-plugin", cross=true))
+    def chiselPluginIvy = Some(getVersion("chisel-plugin", cross = true))
   }
 
   object cde extends CDE
@@ -101,9 +101,20 @@ trait RocketChip
 
 object xsutils extends SbtModule with ScalafmtModule with CommonModule {
 
-  override def ivyDeps = Agg(getVersion("chisel"))
-
-  override def millSourcePath = os.pwd / "xs-utils"
+  override def millSourcePath = os.pwd
 
   override def moduleDeps = super.moduleDeps ++ Seq(rocketchip)
+
+  override def ivyDeps = super.ivyDeps() ++ Agg(
+    getVersion("chisel"),
+    getVersion("chiseltest", "edu.berkeley.cs"),
+  )
+
+  object test extends SbtModuleTests with TestModule.ScalaTest {
+    override def ivyDeps = super.ivyDeps() ++ Agg(
+      getVersion("scalatest","org.scalatest")
+    )
+
+    def testFramework = "org.scalatest.tools.Framework"
+  }
 }
