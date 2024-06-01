@@ -177,7 +177,7 @@ object MBISTPipeline {
   }
 }
 
-class MBISTPipeline(level: Int, moduleName: String = s"MBISTPipeline_${uniqueId}", myNode: PipelineBaseNode) extends Module {
+class MBISTPipeline(level: Int, moduleName: String = s"MBISTPipeline_${uniqueId}", val myNode: PipelineBaseNode) extends Module {
   override val desiredName = moduleName
 
   def genCSV(intf: InterfaceInfo, csvName: String): Unit = {
