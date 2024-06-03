@@ -69,10 +69,12 @@ class TLUStoreBuffer(outstanding: Int = 16)(implicit p: Parameters) extends Lazy
     private val issValidReg = RegInit(false.B)
     private val issBitsReg = Reg(new TLBundleA(out._1.params))
     private val pipeEn = !issValidReg || out._1.a.ready
+    private val allowIss = Mux(waits(issPtr.value), deqPtr === issPtr, true.B)
+    private val issValid = issPtr =/= enqPtr && allowIss
     when(pipeEn) {
-      issValidReg := issPtr =/= enqPtr
+      issValidReg := issValid
     }
-    when(pipeEn && issPtr =/= enqPtr) {
+    when(pipeEn && issValid) {
       issBitsReg := payload(issPtr.value)
       issBitsReg.source := issPtr.value
       issPtr := issPtr + 1.U
