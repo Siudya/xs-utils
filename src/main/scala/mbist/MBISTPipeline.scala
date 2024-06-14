@@ -229,31 +229,33 @@ class MBISTPipeline(level: Int, moduleName: String = s"MBISTPipeline_${uniqueId}
 
   ramNodes.zip(toSRAM).zip(sramDataOut).foreach({
     case ((child, bd), dout) =>
-      val selectedVec = child.array_id.map(_.U === arrayReg || allReg)
+      val selectedVec = child.array_id.map(_.U === arrayReg)
       val selected = selectedVec.reduce(_ || _)
-      bd.addr := Mux(selected, addrReg(child.bd.params.addrWidth - 1, 0), 0.U)
-      bd.addr_rd := Mux(selected, addrRdReg(child.bd.params.addrWidth - 1, 0), 0.U)
+      val doSpread = selected || allReg
+      bd.addr := Mux(doSpread, addrReg(child.bd.params.addrWidth - 1, 0), 0.U)
+      bd.addr_rd := Mux(doSpread, addrRdReg(child.bd.params.addrWidth - 1, 0), 0.U)
       bd.wdata := dataInReg(child.bd.params.dataWidth - 1, 0)
-      bd.re := Mux(selected, renReg, 0.U)
-      bd.we := Mux(selected, wenReg, 0.U)
+      bd.re := Mux(doSpread, renReg, 0.U)
+      bd.we := Mux(doSpread, wenReg, 0.U)
       bd.wmask := beReg(child.bd.params.maskWidth - 1, 0)
       bd.ack := reqReg
-      bd.selectedOH := Mux(reqReg(0).asBool, Cat(selectedVec.reverse), ~0.U(child.bd.selectedOH.getWidth.W))
+      bd.selectedOH := Fill(selectedVec.length, allReg) | Mux(reqReg(0).asBool, Cat(selectedVec.reverse), ~0.U(child.bd.selectedOH.getWidth.W)).asUInt
       bd.array := arrayReg
       dout := Mux(selected, bd.rdata, 0.U)
   })
   pipelineNodes.zip(toNextPipeline).zip(pipelineDataOut).foreach({
     case ((child, bd), dout) =>
-      val selected = child.array_id.map(_.U === arrayReg || allReg).reduce(_ || _)
-      bd.mbist_array := Mux(selected, arrayReg(child.bd.params.arrayWidth - 1, 0), 0.U)
+      val selected = child.array_id.map(_.U === arrayReg).reduce(_ || _)
+      val doSpread = selected || allReg
+      bd.mbist_array := Mux(doSpread, arrayReg(child.bd.params.arrayWidth - 1, 0), 0.U)
       bd.mbist_req := reqReg
-      bd.mbist_all := Mux(selected, allReg, 0.U)
-      bd.mbist_writeen := Mux(selected, wenReg, 0.U)
+      bd.mbist_all := Mux(doSpread, allReg, 0.U)
+      bd.mbist_writeen := Mux(doSpread, wenReg, 0.U)
       bd.mbist_be := beReg(child.bd.params.maskWidth - 1, 0)
-      bd.mbist_addr := Mux(selected, addrReg(child.bd.params.addrWidth - 1, 0), 0.U)
+      bd.mbist_addr := Mux(doSpread, addrReg(child.bd.params.addrWidth - 1, 0), 0.U)
       bd.mbist_indata := dataInReg(child.bd.params.dataWidth - 1, 0)
-      bd.mbist_readen := Mux(selected, renReg, 0.U)
-      bd.mbist_addr_rd := Mux(selected, addrRdReg(child.bd.params.addrWidth - 1, 0), 0.U)
+      bd.mbist_readen := Mux(doSpread, renReg, 0.U)
+      bd.mbist_addr_rd := Mux(doSpread, addrRdReg(child.bd.params.addrWidth - 1, 0), 0.U)
       dout := Mux(selected, bd.mbist_outdata, 0.U)
   })
 }
