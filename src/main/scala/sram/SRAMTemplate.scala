@@ -356,14 +356,19 @@ class SRAMTemplate[T <: Data]
     val w = Flipped(new SRAMWriteBus(gen, set, way))
   })
   val extra_reset = if (extraReset) Some(IO(Input(Bool()))) else None
+  val broadCast = if (hasMbist) Some(IO(new BroadCastBundle)) else None
   val broadCastSignals = Wire(new BroadCastBundle)
   val implementSinglePort = singlePort
   val isBypassWriteLegal = if (implementSinglePort) true else bypassWrite
   require(isBypassWriteLegal, "Dual port SRAM MUST implement bypass write!")
 
   broadCastSignals := 0.U.asTypeOf(new BroadCastBundle)
-  dontTouch(broadCastSignals)
-  if (hasMbist) SRAMTemplate.addBroadCastBundleSink(broadCastSignals)
+  if (hasMbist) {
+    SRAMTemplate.addBroadCastBundleSink(broadCast.get)
+    broadCastSignals := broadCast.get
+    broadCast.get := DontCare
+    dontTouch(broadCast.get)
+  }
   wrapperId += 1
   var sramName = ""
 
@@ -424,6 +429,7 @@ class SRAMTemplate[T <: Data]
     sramName = vname
     val myNodeParam = RAM2MBISTParams(set, myDataWidth, myMaskWidth, implementSinglePort, vname, parentName, myNodeNum, myArrayIds.max, bitWrite, foundry, sramInst)
     val sram_prefix = "sram_" + nodeId + "_"
+    val mbist = if (hasShareBus) Some(IO(new RAM2MBIST(myNodeParam))) else None
     val myMbistBundle = Wire(new RAM2MBIST(myNodeParam))
     myMbistBundle := DontCare
     myMbistBundle.selectedOH := Fill(myMbistBundle.selectedOH.getWidth, 1.U(1.W))
@@ -431,7 +437,8 @@ class SRAMTemplate[T <: Data]
     myMbistBundle.we := false.B
     myMbistBundle.re := false.B
     if (hasMbist && hasShareBus) {
-      dontTouch(myMbistBundle)
+      dontTouch(mbist.get)
+      myMbistBundle <> mbist.get
     }
 
     /** *****************************connection between mbist and sram****************************** */
@@ -452,7 +459,7 @@ class SRAMTemplate[T <: Data]
       mbistClkGate.get.mbist.readen := myMbistBundle.re
     }
     if (hasMbist && hasShareBus) {
-      MBIST.addRamNode(myMbistBundle, sram_prefix, myArrayIds)
+      MBIST.addRamNode(mbist.get, sram_prefix, myArrayIds)
       val addId = if (isNto1) mbistNodeNumNto1 else mbistNodeNum1toN
       nodeId += addId
       SRAMTemplate.increaseDomainID(addId)
