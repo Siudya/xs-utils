@@ -1,35 +1,35 @@
-/***************************************************************************************
-* Copyright (c) 2020-2021 Institute of Computing Technology, Chinese Academy of Sciences
-* Copyright (c) 2020-2021 Peng Cheng Laboratory
-*
-* XiangShan is licensed under Mulan PSL v2.
-* You can use this software according to the terms and conditions of the Mulan PSL v2.
-* You may obtain a copy of Mulan PSL v2 at:
-*          http://license.coscl.org.cn/MulanPSL2
-*
-* THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
-* EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
-* MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
-*
-* See the Mulan PSL v2 for more details.
-***************************************************************************************/
+/** *************************************************************************************
+  * Copyright (c) 2020-2021 Institute of Computing Technology, Chinese Academy of Sciences
+  * Copyright (c) 2020-2021 Peng Cheng Laboratory
+  *
+  * XiangShan is licensed under Mulan PSL v2.
+  * You can use this software according to the terms and conditions of the Mulan PSL v2.
+  * You may obtain a copy of Mulan PSL v2 at:
+  *          http://license.coscl.org.cn/MulanPSL2
+  *
+  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+  * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+  *
+  * See the Mulan PSL v2 for more details.
+  * *************************************************************************************
+  */
 
 package xs.utils.perf
 
 import chisel3._
 import org.chipsalliance.cde.config.Parameters
-import xs.util.perf.LogHelper
 
 trait HasPerfLogging {
   this: Module =>
   val p: Parameters
-   private val perfDump = WireInit(false.B)
+  private val perfDump = WireInit(false.B)
   private val perfClean = WireInit(false.B)
   private val logEnable = WireInit(false.B)
   private val logTimestamp = WireInit(0.U(64.W))
   private val env = p(DebugOptionsKey)
   private val perfEnable = env.EnablePerfDebug && !env.FPGAPlatform
-  private val logHelper = if(perfEnable) Some(Module(new LogHelper)) else None
+  private val logHelper = if (perfEnable) Some(Module(new LogHelper)) else None
   logHelper.foreach(m => {
     perfDump := m.io.dump
     perfClean := m.io.clean
@@ -54,15 +54,14 @@ trait HasPerfLogging {
     }
   }
 
-  def XSPerfHistogram
-  (
-    perfName: String,
-    perfCnt: UInt,
-    enable: Bool,
-    start: Int,
-    stop: Int,
-    step: Int,
-    left_strict: Boolean = false,
+  def XSPerfHistogram(
+    perfName:     String,
+    perfCnt:      UInt,
+    enable:       Bool,
+    start:        Int,
+    stop:         Int,
+    step:         Int,
+    left_strict:  Boolean = false,
     right_strict: Boolean = false
   ): Unit = {
     if (perfEnable) {
@@ -72,7 +71,7 @@ trait HasPerfLogging {
       require(stop > start)
       require(nBins > 0)
 
-      (0 until nBins) map { i =>
+      (0 until nBins).map { i =>
         val binRangeStart = start + i * step
         val binRangeStop = start + (i + 1) * step
         val inRange = perfCnt >= binRangeStart.U && perfCnt < binRangeStop.U
@@ -134,5 +133,3 @@ trait HasPerfLogging {
     (stop, next_counter)
   }
 }
-
-
