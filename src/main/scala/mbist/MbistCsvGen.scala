@@ -18,7 +18,7 @@ class MbistCsvGen(val intf: InterfaceInfo, val pip: MbistPipeline, val csvName: 
 
     def removeSubstring(str: String): String = {
       val matcher = pattern.matcher(str)
-      matcher.replaceAll("")
+      matcher.replaceAll("").replace(".", "_")
     }
 
     val node = pip.myNode
