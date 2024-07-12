@@ -219,7 +219,7 @@ class SRAMTemplate[T <: Data](
   private val mcpHold = if (multicycle > 1) renReg(multicycle - 1, 1).orR else false.B
   private val resetHold = if (shouldReset) resetState else false.B
   io.r.req.ready := !singleHold && !mcpHold && !resetHold
-  io.w.req.ready := true.B
+  io.w.req.ready := !mcpHold && !resetHold
 }
 
 class FoldedSRAMTemplate[T <: Data](
