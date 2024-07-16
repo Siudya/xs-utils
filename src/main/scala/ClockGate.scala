@@ -44,6 +44,8 @@ object ClockGate {
       teBoringQueue.last
     } else {
       val cg = Wire(new CgteBundle)
+      cg.te := TE
+      dontTouch(cg)
       teBoringQueue.append(cg)
       hashModulesHasCgen.append(module)
       cg
