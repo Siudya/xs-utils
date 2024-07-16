@@ -1,7 +1,11 @@
 package xs.utils
 
 import chisel3._
+import chisel3.experimental.BaseModule
 import chisel3.util._
+import chisel3.util.experimental.BoringUtils
+
+import scala.collection.mutable
 
 class ClockGate extends BlackBox with HasBlackBoxInline {
   val io = IO(new Bundle {
@@ -26,4 +30,34 @@ class ClockGate extends BlackBox with HasBlackBoxInline {
       |endmodule
       |
       |""".stripMargin)
+}
+
+class CgteBundle extends Bundle {
+  val te = Input(Bool())
+}
+object ClockGate {
+  private val teBoringQueue = new mutable.Queue[CgteBundle]
+  private val hashModulesHasCgen = new mutable.Queue[BaseModule]
+  def apply(TE:Bool, E:Bool, CK:Clock):Clock = {
+    val module = Module.currentModule.get
+    val cgbd = if(hashModulesHasCgen.contains(module)) {
+      teBoringQueue.last
+    } else {
+      val cg = Wire(new CgteBundle)
+      teBoringQueue.append(cg)
+      hashModulesHasCgen.append(module)
+      cg
+    }
+    val clockGate = Module(new ClockGate)
+    clockGate.io.E := E
+    clockGate.io.TE := cgbd.te
+    clockGate.io.CK := CK
+    clockGate.io.Q
+  }
+  def getTop:CgteBundle = {
+    val cgen = Wire(new CgteBundle)
+    teBoringQueue.toSeq.foreach(BoringUtils.bore(_) := cgen)
+    teBoringQueue.clear()
+    cgen
+  }
 }
