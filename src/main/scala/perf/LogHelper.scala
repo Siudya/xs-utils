@@ -1,6 +1,7 @@
 package xs.utils.perf
 import chisel3._
 import chisel3.util.{HasBlackBoxInline, HasBlackBoxResource}
+import xs.utils.GlobalData
 
 class LogHelper extends HasBlackBoxInline {
   val io = IO(new Bundle {
@@ -9,9 +10,8 @@ class LogHelper extends HasBlackBoxInline {
     val logEnable = Output(Bool())
     val timer = Output(UInt(64.W))
   })
-  setInline(
-    "LogHelper.sv",
-    s"""|module LogHelper (
+  setInline(s"${GlobalData.prefix}LogHelper.sv",
+    s"""|module ${GlobalData.prefix}LogHelper (
         |  output clean,
         |  output dump,
         |  output logEnable,
