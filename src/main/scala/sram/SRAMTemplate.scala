@@ -94,6 +94,7 @@ class SRAMTemplate[T <: Data](
   bypassWrite:  Boolean = false,
   multicycle:   Int = 1,
   hasMbist:     Boolean = false,
+  suffix:       String = "",
   val foundry:  String = "Unknown",
   val sramInst: String = "STANDARD")
     extends Module {
@@ -105,7 +106,7 @@ class SRAMTemplate[T <: Data](
   private val cg = Module(new MbistClockGateCell)
   private val dataWidth = gen.getWidth * way
   require(multicycle >= 1)
-  private val (mbistBd, brcBd, array, vname) = SramHelper.genRam(
+  private val (mbistBd, brcBd, array, nodeNum, nto1) = SramHelper.genRam(
     gen.getWidth,
     way,
     set,
@@ -114,11 +115,11 @@ class SRAMTemplate[T <: Data](
     hasMbist,
     cg.out_clock,
     None,
+    suffix,
     foundry,
     sramInst,
     this
   )
-  val sramName = vname
 
   val extra_reset = if (extraReset) Some(IO(Input(Bool()))) else None
 
@@ -153,8 +154,20 @@ class SRAMTemplate[T <: Data](
   } else {
     waddr
   }
-  private val ramWmask = if (hasMbist) Mux(mbistBd.ack, mbistBd.wmask, wmask) else wmask
-  private val ramWdata = if (hasMbist) Mux(mbistBd.ack, mbistBd.wdata, wdata) else wdata
+  private val mbistWmask = if(nto1) {
+    val n = nodeNum / way
+    val selMask = Cat(Seq.tabulate(way)(idx => mbistBd.selectedOH(n * idx + n - 1, n * idx).orR).reverse)
+    val fullMask = Fill(way, mbistBd.wmask)
+    selMask & fullMask
+  } else {
+    val n = way / nodeNum
+    val selMask = Cat(Seq.tabulate(way)(idx => mbistBd.selectedOH(idx / n)).reverse)
+    val fullMask = Fill(nodeNum, mbistBd.wmask)
+    selMask & fullMask
+  }
+  private val mbistWdata = Fill(nodeNum, mbistBd.wdata)
+  private val ramWmask = if (hasMbist) Mux(mbistBd.ack, mbistWmask, wmask) else wmask
+  private val ramWdata = if (hasMbist) Mux(mbistBd.ack, mbistWdata, wdata) else wdata
   private val ramRen = if (hasMbist) Mux(mbistBd.ack, mbistBd.re, ren) else ren
   private val ramRaddr = if (hasMbist) Mux(mbistBd.ack, mbistBd.addr_rd, raddr) else raddr
 
@@ -175,12 +188,11 @@ class SRAMTemplate[T <: Data](
   }.elsewhen(renReg.orR) {
     renReg := renReg >> 1.U
   }
-  if (!bypassWrite) {
-    val concurrentRW = io.w.req.fire && io.r.req.fire && io.w.req.bits.setIdx === io.r.req.bits.setIdx
+  private val concurrentRW = io.w.req.fire && io.r.req.fire && io.w.req.bits.setIdx === io.r.req.bits.setIdx
+  if(!bypassWrite) {
     assert(!concurrentRW, "Concurrent reading and writing to the same addr of SRAM is not allowed!")
   }
-  private val doBypass =
-    if (bypassWrite) io.w.req.fire && io.r.req.fire && (io.w.req.bits.setIdx === io.r.req.bits.setIdx) else false.B
+  private val doBypass = if (bypassWrite) concurrentRW else false.B
   private val doBypassReg = RegEnable(doBypass, false.B, io.r.req.fire)
   private val wmaskReg = RegEnable(wmask, 0.U, doBypass & io.r.req.fire)
   private val segment = dataWidth / wmask.getWidth
@@ -213,7 +225,8 @@ class SRAMTemplate[T <: Data](
       io.r.resp.data := rdataReg.asTypeOf(io.r.resp.data)
     }
   }
-  mbistBd.rdata := rdataReg
+  private val selectOHReg = RegEnable(mbistBd.selectedOH, renReg(0))
+  mbistBd.rdata := Mux1H(selectOHReg, rdataReg.asTypeOf(Vec(nodeNum, UInt((dataWidth / nodeNum).W))))
 
   private val singleHold = if (singlePort) io.w.req.valid else false.B
   private val mcpHold = if (multicycle > 1) renReg(multicycle - 1, 1).orR else false.B

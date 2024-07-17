@@ -66,10 +66,11 @@ object SramHelper {
     bist:     Boolean,
     rclk:     Clock,
     wclk:     Option[Clock],
+    suffix:   String,
     foundry:  String,
     sramInst: String,
     template: RawModule
-  ): (Ram2Mbist, SramBroadcastBundle, Instance[SramArray], String) = {
+  ): (Ram2Mbist, SramBroadcastBundle, Instance[SramArray], Int, Boolean) = {
     val isNto1 = ew > maxMbistDataWidth
     //** ******implement mbist interface node(multiple nodes for one way)******
     val (mbistNodeNumForEachWay, mbistNodeNumNto1) = getNodeNumForEachWayAndNodeNum_Nto1(ew, way, maxMbistDataWidth)
@@ -87,7 +88,7 @@ object SramHelper {
     val bitWrite = way != 1
     val selLen = if (bist) mbistNodeNum else 0
 
-    val (array, vname) = SramProto(rclk, !dp, set, ew * way, way, mcp, wclk, bist, selLen)
+    val (array, vname) = SramProto(rclk, !dp, set, ew * way, way, mcp, wclk, bist, selLen, suffix)
     val bdParam =
       Ram2MbistParams(
         set,
@@ -133,6 +134,6 @@ object SramHelper {
       array.mbist.get.dft_ram_bp_clken := broadcast.ram_bp_clken
       array.mbist.get.dft_ram_bypass := broadcast.ram_bypass
     }
-    (mbistBundle, broadCastSignals, array, vname)
+    (mbistBundle, broadCastSignals, array, mbistNodeNum, isNto1)
   }
 }
