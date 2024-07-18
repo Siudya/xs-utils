@@ -17,6 +17,7 @@ class SramBroadcastBundle extends Bundle {
   val ram_bp_clken = Input(Bool())
   val ram_aux_clk = Input(Bool())
   val ram_aux_ckbp = Input(Bool())
+  val ram_mcp_hold = Input(Bool())
   val cgen = Input(Bool())
 }
 

@@ -103,15 +103,16 @@ class SRAMTemplate[T <: Data](
     val r = Flipped(new SRAMReadBus(gen, set, way))
     val w = Flipped(new SRAMWriteBus(gen, set, way))
   })
-  private val cg = Module(new MbistClockGateCell)
-  private val dataWidth = gen.getWidth * way
   require(multicycle >= 1)
+  private val mcp = multicycle > 1
+  private val cg = Module(new MbistClockGateCell(mcp))
+  private val dataWidth = gen.getWidth * way
   private val (mbistBd, brcBd, array, nodeNum, nto1) = SramHelper.genRam(
     gen.getWidth,
     way,
     set,
     !singlePort,
-    multicycle > 1,
+    mcp,
     hasMbist,
     cg.out_clock,
     None,
@@ -127,19 +128,23 @@ class SRAMTemplate[T <: Data](
 
   require(multicycle == 1 & shouldReset || !shouldReset, "MCP rams do not support reset!")
   if (shouldReset) {
-    val _resetState = RegInit(true.B)
-    val (_resetSet, resetFinish) = Counter(_resetState, set)
-    when(resetFinish) { _resetState := false.B }
-    if (extra_reset.isDefined) {
-      when(extra_reset.get) {
-        _resetState := true.B
+    withClockAndReset(cg.out_clock, reset) {
+      val _resetState = RegInit(true.B)
+      val (_resetSet, resetFinish) = Counter(_resetState, set)
+      when(resetFinish) {
+        _resetState := false.B
       }
+      if (extra_reset.isDefined) {
+        when(extra_reset.get) {
+          _resetState := true.B
+        }
+      }
+      resetState := _resetState
+      resetSet := _resetSet
     }
-    resetState := _resetState
-    resetSet := _resetSet
   }
-
-  private val wen = io.w.req.fire || resetState
+  private val resetReg = RegNext(false.B, true.B)
+  private val wen = io.w.req.fire || resetState && !resetReg
   private val wmask = Mux(resetState, Fill(way, true.B), io.w.req.bits.waymask.getOrElse("b1".U))
   private val wdata = Mux(resetState, 0.U, io.w.req.bits.data.asUInt)
   private val waddr = Mux(resetState, resetSet, io.w.req.bits.setIdx)
@@ -171,6 +176,19 @@ class SRAMTemplate[T <: Data](
   private val ramRen = if (hasMbist) Mux(mbistBd.ack, mbistBd.re, ren) else ren
   private val ramRaddr = if (hasMbist) Mux(mbistBd.ack, mbistBd.addr_rd, raddr) else raddr
 
+  private val wenReg = RegInit(0.U(multicycle.W))
+  private val renReg = RegInit(0.U(multicycle.W))
+  when(ramWen) {
+    wenReg := (1 << (multicycle - 1)).U
+  }.elsewhen(wenReg.orR) {
+    wenReg := wenReg >> 1.U
+  }
+  when(ramRen) {
+    renReg := (1 << (multicycle - 1)).U
+  }.elsewhen(renReg.orR) {
+    renReg := renReg >> 1.U
+  }
+
   private val ramRdata = SramProto.read(array, singlePort, ramRaddr, ramRen)
   when(ramWen) {
     SramProto.write(array, singlePort, ramWaddr, ramWdata, ramWmask)
@@ -180,18 +198,9 @@ class SRAMTemplate[T <: Data](
   cg.mbist.req := mbistBd.ack
   cg.mbist.readen := mbistBd.re
   cg.mbist.writeen := mbistBd.we
-  cg.E := ramRen | ramWen
+  cg.E := ren | wen
 
-  private val renReg = RegInit(0.U(multicycle.W))
-  when(ramRen) {
-    renReg := (1 << (multicycle - 1)).U
-  }.elsewhen(renReg.orR) {
-    renReg := renReg >> 1.U
-  }
   private val concurrentRW = io.w.req.fire && io.r.req.fire && io.w.req.bits.setIdx === io.r.req.bits.setIdx
-  if(!bypassWrite) {
-    assert(!concurrentRW, "Concurrent reading and writing to the same addr of SRAM is not allowed!")
-  }
   private val doBypass = if (bypassWrite) concurrentRW else false.B
   private val doBypassReg = RegEnable(doBypass, false.B, io.r.req.fire)
   private val wmaskReg = RegEnable(wmask, 0.U, doBypass & io.r.req.fire)
@@ -228,10 +237,11 @@ class SRAMTemplate[T <: Data](
   private val selectOHReg = RegEnable(mbistBd.selectedOH, renReg(0))
   mbistBd.rdata := Mux1H(selectOHReg, rdataReg.asTypeOf(Vec(nodeNum, UInt((dataWidth / nodeNum).W))))
 
+  private val reqVector = renReg | wenReg
   private val singleHold = if (singlePort) io.w.req.valid else false.B
-  private val mcpHold = if (multicycle > 1) renReg(multicycle - 1, 1).orR else false.B
-  private val resetHold = if (shouldReset) resetState else false.B
-  io.r.req.ready := !singleHold && !mcpHold && !resetHold
+  private val mcpHold = if (mcp) reqVector(multicycle - 1, 1).orR else false.B
+  private val resetHold = if (shouldReset) resetState || resetReg else false.B
+  io.r.req.ready := !mcpHold && !resetHold && !singleHold
   io.w.req.ready := !mcpHold && !resetHold
 }
 
