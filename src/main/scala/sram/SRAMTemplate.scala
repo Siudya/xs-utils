@@ -107,7 +107,7 @@ class SRAMTemplate[T <: Data](
   private val mcp = multicycle > 1
   private val cg = Module(new MbistClockGateCell(mcp))
   private val dataWidth = gen.getWidth * way
-  private val (mbistBd, brcBd, array, nodeNum, nto1) = SramHelper.genRam(
+  private val (mbistBd, brcBd, array, nodeNum, nto1, vname) = SramHelper.genRam(
     gen.getWidth,
     way,
     set,
@@ -121,6 +121,7 @@ class SRAMTemplate[T <: Data](
     sramInst,
     this
   )
+  val sramName:String = vname
 
   val extra_reset = if (extraReset) Some(IO(Input(Bool()))) else None
 

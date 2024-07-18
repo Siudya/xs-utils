@@ -70,7 +70,7 @@ object SramHelper {
     foundry:  String,
     sramInst: String,
     template: RawModule
-  ): (Ram2Mbist, SramBroadcastBundle, Instance[SramArray], Int, Boolean) = {
+  ): (Ram2Mbist, SramBroadcastBundle, Instance[SramArray], Int, Boolean, String) = {
     val isNto1 = ew > maxMbistDataWidth
     //** ******implement mbist interface node(multiple nodes for one way)******
     val (mbistNodeNumForEachWay, mbistNodeNumNto1) = getNodeNumForEachWayAndNodeNum_Nto1(ew, way, maxMbistDataWidth)
@@ -134,6 +134,6 @@ object SramHelper {
       array.mbist.get.dft_ram_bp_clken := broadcast.ram_bp_clken
       array.mbist.get.dft_ram_bypass := broadcast.ram_bypass
     }
-    (mbistBundle, broadCastSignals, array, mbistNodeNum, isNto1)
+    (mbistBundle, broadCastSignals, array, mbistNodeNum, isNto1, vname)
   }
 }
