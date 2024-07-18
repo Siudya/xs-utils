@@ -14,9 +14,9 @@ class ClockGate extends BlackBox with HasBlackBoxInline {
     val CK = Input(Clock())
     val Q = Output(Clock())
   })
-  private val modName = s"${GlobalData.prefix}ClockGate.sv"
+  private val modName = s"${GlobalData.prefix}ClockGate"
   override val desiredName = modName
-  setInline(modName,
+  setInline(s"$modName.sv",
     s"""
       |module $modName (
       |  input  wire TE,
