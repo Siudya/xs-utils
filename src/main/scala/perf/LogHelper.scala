@@ -10,8 +10,10 @@ class LogHelper extends HasBlackBoxInline {
     val logEnable = Output(Bool())
     val timer = Output(UInt(64.W))
   })
-  setInline(s"${GlobalData.prefix}LogHelper.sv",
-    s"""|module ${GlobalData.prefix}LogHelper (
+  private val modName = s"${GlobalData.prefix}LogHelper.sv"
+  override val desiredName = modName
+  setInline(modName,
+    s"""|module $modName (
         |  output clean,
         |  output dump,
         |  output logEnable,
