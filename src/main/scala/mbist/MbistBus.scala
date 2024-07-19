@@ -126,6 +126,7 @@ class Ram2Mbist(val params: Ram2MbistParams) extends MbistCommonBundle() {
   val wdata = Input(UInt(params.dataWidth.W))
   val wmask = Input(UInt(params.maskWidth.W))
   val re, we = Input(Bool())
+  val ere, ewe = Input(Bool())
   val rdata = Output(UInt(params.dataWidth.W))
   val ack = Input(Bool())
   val selectedOH = Input(UInt(params.nodeNum.W))
@@ -138,6 +139,8 @@ class Ram2Mbist(val params: Ram2MbistParams) extends MbistCommonBundle() {
     "wmask",
     "re",
     "we",
+    "ere",
+    "ewe",
     "ack",
     "selectedOH",
     "array"

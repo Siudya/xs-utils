@@ -152,6 +152,8 @@ object MbistPipeline {
             b.bd.ack := a.ack
             b.bd.selectedOH := a.selectedOH
             b.bd.array := a.array
+            b.bd.ere := a.ere
+            b.bd.ewe := a.ewe
             a.rdata := b.bd.rdata
         })
       Some(res)
@@ -188,8 +190,11 @@ class MbistPipeline(level: Int, moduleName: String = s"MbistPipeline_${uniqueId}
   toNextPipeline.foreach(b => dontTouch(b))
   toSRAM.foreach(b => dontTouch(b))
 
+  private val ere = mbist.mbist_readen
+  private val ewe = mbist.mbist_writeen
   private val arrayHit = myNode.array_id.map(_.U === mbist.mbist_array).reduce(_ | _)
   private val activated = mbist.mbist_all | (mbist.mbist_req & arrayHit)
+  private val dataValid = activated & (ere | ewe)
 
   private val pipelineNodesAck =
     if (pipelineNodes.nonEmpty) toNextPipeline.map(_.mbist_ack).reduce(_ | _) else true.B
@@ -200,12 +205,12 @@ class MbistPipeline(level: Int, moduleName: String = s"MbistPipeline_${uniqueId}
   mbist.mbist_ack := reqReg & pipelineNodesAck
 
   private val wenReg = RegEnable(mbist.mbist_writeen, 0.U, activated)
-  private val beReg = RegEnable(mbist.mbist_be, 0.U, activated)
-  private val addrReg = RegEnable(mbist.mbist_addr, 0.U, activated)
-  private val dataInReg = RegEnable(mbist.mbist_indata, 0.U, activated)
+  private val beReg = RegEnable(mbist.mbist_be, 0.U, dataValid)
+  private val addrReg = RegEnable(mbist.mbist_addr, 0.U, dataValid)
+  private val dataInReg = RegEnable(mbist.mbist_indata, 0.U, dataValid)
 
   private val renReg = RegEnable(mbist.mbist_readen, 0.U, activated)
-  private val addrRdReg = RegEnable(mbist.mbist_addr_rd, 0.U, activated)
+  private val addrRdReg = RegEnable(mbist.mbist_addr_rd, 0.U, dataValid)
 
   private val pipelineDataOut = Wire(Vec(toNextPipeline.length, mbist.mbist_outdata.cloneType))
   private val sramDataOut = Wire(Vec(toSRAM.length, mbist.mbist_outdata.cloneType))
@@ -229,6 +234,8 @@ class MbistPipeline(level: Int, moduleName: String = s"MbistPipeline_${uniqueId}
         bd.we := Mux(doSpread, wenReg, 0.U)
         bd.wmask := beReg(child.bd.params.maskWidth - 1, 0)
         bd.ack := reqReg
+        bd.ere := ere
+        bd.ewe := ewe
         bd.selectedOH := Fill(selectedVec.length, allReg) | Mux(
           reqReg(0).asBool,
           Cat(selectedVec.reverse),

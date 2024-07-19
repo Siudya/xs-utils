@@ -93,6 +93,7 @@ class SRAMTemplate[T <: Data](
   holdRead:     Boolean = false,
   bypassWrite:  Boolean = false,
   multicycle:   Int = 1,
+  holdMcp:      Boolean = false,
   hasMbist:     Boolean = false,
   suffix:       String = "",
   val foundry:  String = "Unknown",
@@ -101,7 +102,9 @@ class SRAMTemplate[T <: Data](
 
   val io = IO(new Bundle {
     val r = Flipped(new SRAMReadBus(gen, set, way))
+    val earlyRen = if(holdMcp) Some(Input(Bool())) else None
     val w = Flipped(new SRAMWriteBus(gen, set, way))
+    val earlyWen = if(holdMcp) Some(Input(Bool())) else None
   })
   require(multicycle >= 1)
   private val mcp = multicycle > 1
@@ -179,19 +182,37 @@ class SRAMTemplate[T <: Data](
 
   private val wenReg = RegInit(0.U(multicycle.W))
   private val renReg = RegInit(0.U(multicycle.W))
-  when(ramWen) {
-    wenReg := (1 << (multicycle - 1)).U
-  }.elsewhen(wenReg.orR) {
-    wenReg := wenReg >> 1.U
-  }
-  when(ramRen) {
-    renReg := (1 << (multicycle - 1)).U
-  }.elsewhen(renReg.orR) {
-    renReg := renReg >> 1.U
+  wenReg := Cat(ramWen, wenReg) >> 1.U
+  renReg := Cat(ramRen, renReg) >> 1.U
+
+  private val wenStretched = if(holdMcp) {
+    val ewe = if(hasMbist) mbistBd.ewe || io.earlyWen.get else io.earlyWen.get
+    val wens = RegInit(0.U((multicycle - 1).W))
+    when(ewe) {
+      wens := Fill(multicycle - 1, true.B)
+    }.otherwise {
+      wens := Cat(ramWen, wens) >> 1.U
+    }
+    wens(0)
+  } else {
+    ramWen
   }
 
-  private val ramRdata = SramProto.read(array, singlePort, ramRaddr, ramRen)
-  when(ramWen) {
+  private val renStretched = if(holdMcp) {
+    val ere = if(hasMbist) mbistBd.ere || io.earlyRen.get else io.earlyRen.get
+    val rens = RegInit(0.U((multicycle - 1).W))
+    when(ere) {
+      rens := Fill(multicycle - 1, true.B)
+    }.otherwise {
+      rens := Cat(ramRen, rens) >> 1.U
+    }
+    rens(0)
+  } else {
+    ramRen
+  }
+
+  private val ramRdata = SramProto.read(array, singlePort, ramRaddr, renStretched)
+  when(wenStretched) {
     SramProto.write(array, singlePort, ramWaddr, ramWdata, ramWmask)
   }
 
