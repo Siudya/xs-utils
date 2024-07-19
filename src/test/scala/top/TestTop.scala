@@ -1,9 +1,10 @@
+package top
+
 import chisel3._
 import circt.stage.{ChiselStage, FirtoolOption}
 import xs.utils._
 import chisel3.stage.ChiselGeneratorAnnotation
 import org.chipsalliance.cde.config.{Config, Field, Parameters}
-
 import scala.annotation.tailrec
 import scala.reflect.runtime.universe._
 
@@ -16,7 +17,6 @@ class DefaultConfig extends Config((site, here, up) => {
 })
 
 object Parser {
-
 
   def apply(args: Array[String]): (Parameters, Array[String]) = {
     val defaultConfig = new DefaultConfig
@@ -49,6 +49,11 @@ object Parser {
             case OptKey => up(OptKey).copy(build = bdStr)
           }), tail)
 
+        case "--prefix" :: pfxStr :: tail =>
+          GlobalData.prefix = pfxStr
+          PrefixPhase.prefix = pfxStr
+          parse(config, tail)
+
         case option :: tail =>
           firrtlOpts :+= option
           parse(config, tail)
@@ -69,7 +74,7 @@ object TestTop extends App {
   val (config, firrtlOpts) = Parser(args)
   val module = if (config(OptKey).module == "") "dft.OCC" else config(OptKey).module
   lazy val m = Class.forName("xs.utils." + module).getDeclaredConstructor().newInstance().asInstanceOf[RawModule]
-  (new ChiselStage).execute(firrtlOpts, Seq(
+  (new XsStage).execute(firrtlOpts, Seq(
     FirtoolOption("-O=release"),
     FirtoolOption("--disable-all-randomization"),
     FirtoolOption("--disable-annotation-unknown"),
@@ -82,5 +87,7 @@ object TestTop extends App {
       " disallowExpressionInliningInPorts, disallowMuxInlining"),
     ChiselGeneratorAnnotation(() => m)
   ))
-  FileRegisters.write(config(OptKey).build, module)
+  val mod = GlobalData.prefix + module.split("\\.").last
+  dft.FileManager.writeOut(mod)
+  FileRegisters.write("build", mod + ".")
 }

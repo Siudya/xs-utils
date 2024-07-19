@@ -96,7 +96,7 @@ class SRAMTemplate[T <: Data](
   holdMcp:      Boolean = false,
   hasMbist:     Boolean = false,
   suffix:       String = "",
-  val foundry:  String = "Unknown",
+  val foundry:  String = "TSMC28",
   val sramInst: String = "STANDARD")
     extends Module {
 

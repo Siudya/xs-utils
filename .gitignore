@@ -4,5 +4,6 @@ out
 build
 .metal
 *.icl
-*.pdl
 *.gz
+sim
+*.iml
