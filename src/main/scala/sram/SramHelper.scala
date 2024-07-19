@@ -4,10 +4,11 @@ import chisel3._
 import chisel3.experimental.hierarchy.Instance
 import chisel3.util._
 import chisel3.util.experimental.BoringUtils
+import xs.utils.GlobalData
 import xs.utils.mbist.Mbist._
 import xs.utils.mbist.{Mbist, Ram2Mbist, Ram2MbistParams}
 
-import scala.collection.mutable
+import scala.collection.{immutable, mutable}
 import scala.math.sqrt
 
 object SramHelper {
