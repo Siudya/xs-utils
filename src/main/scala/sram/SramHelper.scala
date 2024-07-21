@@ -70,7 +70,7 @@ object SramHelper {
     foundry:  String,
     sramInst: String,
     template: RawModule
-  ): (Ram2Mbist, SramBroadcastBundle, Instance[SramArray], Int, Boolean, String) = {
+  ): (Ram2Mbist, SramBroadcastBundle, Instance[SramArray], Int, Int, String) = {
     val isNto1 = ew > maxMbistDataWidth
     //** ******implement mbist interface node(multiple nodes for one way)******
     val (mbistNodeNumForEachWay, mbistNodeNumNto1) = getNodeNumForEachWayAndNodeNum_Nto1(ew, way, maxMbistDataWidth)
@@ -86,9 +86,9 @@ object SramHelper {
     val mbistMaskWidth = if (isNto1) maskWidthNto1 else maskWidth1toN
     val mbistArrayIds = Seq.tabulate(mbistNodeNum)(idx => getDomainID + idx)
     val bitWrite = way != 1
-    val selLen = if (bist) mbistNodeNum else 0
+    val sramMaskBits = if(isNto1) mbistNodeNum else way
 
-    val (array, vname) = SramProto(rclk, !dp, set, ew * way, way, mcp, wclk, bist, selLen, suffix)
+    val (array, vname) = SramProto(rclk, !dp, set, ew * way, sramMaskBits, mcp, wclk, bist, suffix)
     val bdParam =
       Ram2MbistParams(
         set,
@@ -113,6 +113,7 @@ object SramHelper {
     mbistBundle.ack := false.B
     mbistBundle.we := false.B
     mbistBundle.re := false.B
+    mbistBundle.wmask := Fill(mbistMaskWidth, true.B)
     val broadCastSignals = Wire(new SramBroadcastBundle)
     broadCastSignals := DontCare
     if (bist) {
@@ -130,10 +131,9 @@ object SramHelper {
       broadcast.suggestName("broadcast")
       broadCastSignals := broadcast
       broadCastBdQueue.enqueue(broadcast)
-      array.mbist.get.selectedOH := Mux(broadcast.ram_hold, 0.U, mbistBundle.selectedOH)
       array.mbist.get.dft_ram_bp_clken := broadcast.ram_bp_clken
       array.mbist.get.dft_ram_bypass := broadcast.ram_bypass
     }
-    (mbistBundle, broadCastSignals, array, mbistNodeNum, isNto1, vname)
+    (mbistBundle, broadCastSignals, array, mbistNodeNum, sramMaskBits, vname)
   }
 }

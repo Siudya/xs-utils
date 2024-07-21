@@ -5,8 +5,7 @@ import chisel3.util._
 import chisel3.experimental.hierarchy.{instantiable, public, Definition, Instance}
 import scala.collection.mutable
 
-class SramMbistIO(selectedLen: Int) extends Bundle {
-  val selectedOH = Input(UInt(selectedLen.W))
+class SramMbistIO extends Bundle {
   val dft_ram_bypass = Input(Bool())
   val dft_ram_bp_clken = Input(Bool())
 }
@@ -28,10 +27,10 @@ abstract class SramArray(
   maskSegments: Int,
   hasMbist:     Boolean,
   sramName:     Option[String] = None,
-  selectedLen:  Int,
   singlePort:   Boolean)
     extends RawModule {
-  @public val mbist = if (hasMbist) Some(IO(new SramMbistIO(selectedLen))) else None
+  require(width % maskSegments == 0)
+  @public val mbist = if (hasMbist) Some(IO(new SramMbistIO)) else None
   if (mbist.isDefined) {
     dontTouch(mbist.get)
   }
@@ -82,9 +81,8 @@ class SramArray1P(
   width:        Int,
   maskSegments: Int,
   hasMbist:     Boolean,
-  sramName:     Option[String] = None,
-  selectedLen:  Int)
-    extends SramArray(depth, width, maskSegments, hasMbist, sramName, selectedLen, true) {
+  sramName:     Option[String] = None
+  ) extends SramArray(depth, width, maskSegments, hasMbist, sramName, true) {
   if (maskSegments > 1) {
     val dataType = Vec(maskSegments, UInt((width / maskSegments).W))
     val array = SyncReadMem(depth, dataType)
@@ -117,9 +115,7 @@ class SramArray2P(
   maskSegments: Int,
   hasMbist:     Boolean,
   sramName:     Option[String] = None,
-  selectedLen:  Int)
-    extends SramArray(depth, width, maskSegments, hasMbist, sramName, selectedLen, false) {
-  require(width % maskSegments == 0)
+  ) extends SramArray(depth, width, maskSegments, hasMbist, sramName, false) {
 
   if (maskSegments > 1) {
     val dataType = Vec(maskSegments, UInt((width / maskSegments).W))
@@ -195,7 +191,6 @@ object SramProto {
     MCP:          Boolean = false,
     writeClock:   Option[Clock] = None,
     hasMbist:     Boolean,
-    selectedLen:  Int,
     suffix:       String = ""
   ): (Instance[SramArray], String) = {
     val mbist = if (hasMbist) "_bist" else ""
@@ -205,9 +200,9 @@ object SramProto {
     val sramName = Some(s"sram_array_${numPort}p${depth}x${width}m$maskWidth$mbist$mcpPrefix$suffix")
     if (!defMap.contains(sramName.get)) {
       val sramDef = if (singlePort) {
-        Definition(new SramArray1P(depth, width, maskSegments, hasMbist, sramName, selectedLen))
+        Definition(new SramArray1P(depth, width, maskSegments, hasMbist, sramName))
       } else {
-        Definition(new SramArray2P(depth, width, maskSegments, hasMbist, sramName, selectedLen))
+        Definition(new SramArray2P(depth, width, maskSegments, hasMbist, sramName))
       }
       defMap(sramName.get) = sramDef
     }

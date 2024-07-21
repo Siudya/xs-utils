@@ -110,7 +110,7 @@ class SRAMTemplate[T <: Data](
   private val mcp = multicycle > 1
   private val cg = Module(new MbistClockGateCell(mcp))
   private val dataWidth = gen.getWidth * way
-  private val (mbistBd, brcBd, array, nodeNum, nto1, vname) = SramHelper.genRam(
+  private val (mbistBd, brcBd, array, nodeNum, realMaskBits, vname) = SramHelper.genRam(
     gen.getWidth,
     way,
     set,
@@ -163,19 +163,26 @@ class SRAMTemplate[T <: Data](
   } else {
     waddr
   }
-  private val mbistWmask = if(nto1) {
-    val n = nodeNum / way
-    val selMask = Cat(Seq.tabulate(way)(idx => mbistBd.selectedOH(n * idx + n - 1, n * idx).orR).reverse)
-    val fullMask = Fill(way, mbistBd.wmask)
-    selMask & fullMask
+
+  private val nto1 = realMaskBits > way
+  private val mbistWmask = if(nto1 || nodeNum == way) {
+    mbistBd.selectedOH
   } else {
-    val n = way / nodeNum
-    val selMask = Cat(Seq.tabulate(way)(idx => mbistBd.selectedOH(idx / n)).reverse)
+    val n = realMaskBits / nodeNum
+    val selMask = Cat(Seq.tabulate(realMaskBits)(i => mbistBd.selectedOH(i / n)).reverse)
     val fullMask = Fill(nodeNum, mbistBd.wmask)
     selMask & fullMask
   }
+
+  private val funcWmask = if(nto1) {
+    val n = realMaskBits / way
+    Cat(Seq.tabulate(realMaskBits)(i => wmask(i / n)).reverse)
+  } else {
+    wmask
+  }
+
   private val mbistWdata = Fill(nodeNum, mbistBd.wdata)
-  private val ramWmask = if (hasMbist) Mux(mbistBd.ack, mbistWmask, wmask) else wmask
+  private val ramWmask = if (hasMbist) Mux(mbistBd.ack, mbistWmask, funcWmask) else funcWmask
   private val ramWdata = if (hasMbist) Mux(mbistBd.ack, mbistWdata, wdata) else wdata
   private val ramRen = if (hasMbist) Mux(mbistBd.ack, mbistBd.re, ren) else ren
   private val ramRaddr = if (hasMbist) Mux(mbistBd.ack, mbistBd.addr_rd, raddr) else raddr
@@ -212,7 +219,7 @@ class SRAMTemplate[T <: Data](
   }
 
   private val ramRdata = SramProto.read(array, singlePort, ramRaddr, renStretched)
-  when(wenStretched) {
+  when(wenStretched && !brcBd.ram_hold) {
     SramProto.write(array, singlePort, ramWaddr, ramWdata, ramWmask)
   }
 
