@@ -165,13 +165,13 @@ class SRAMTemplate[T <: Data](
   }
 
   private val nto1 = realMaskBits > way
-  private val mbistWmask = if(nto1 || nodeNum == way) {
-    mbistBd.selectedOH
+  private val fullMbistMask = if(way > 1) Fill(nodeNum, mbistBd.wmask) else Fill(realMaskBits, true.B)
+  private val mbistWmask = if(nto1) {
+    mbistBd.selectedOH & fullMbistMask
   } else {
     val n = realMaskBits / nodeNum
     val selMask = Cat(Seq.tabulate(realMaskBits)(i => mbistBd.selectedOH(i / n)).reverse)
-    val fullMask = Fill(nodeNum, mbistBd.wmask)
-    selMask & fullMask
+    selMask & fullMbistMask
   }
 
   private val funcWmask = if(nto1) {
