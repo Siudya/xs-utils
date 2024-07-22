@@ -58,6 +58,53 @@ object SramHelper {
     res
   }
 
+  private val foundry = "TSMC28"
+  private val SramInstMap: immutable.HashMap[String, String] = immutable.HashMap[String, String](
+    ("sram_array_1p128x100m25", "TS1N28HPCPUHDLVTB128X100M1SW"),
+    ("sram_array_1p128x1024m256", "TS1N28HPCPUHDLVTB128X256M1S"),
+    ("sram_array_1p512x236m59", "TS1N28HPCPUHDLVTB512X59M4S"),
+    ("sram_array_1p256x16m1", "TS1N28HPCPUHDLVTB256X16M2SW"),
+    ("sram_array_1p256x24m12", "TS1N28HPCPUHDLVTB256X24M2SW"),
+    ("sram_array_2p2048x2m2", "TS6N28HPCPLVTA2048X2M8S"),
+    ("sram_array_2p512x12m6", "TS6N28HPCPLVTA512X12M4SW"),
+    ("sram_array_1p128x50m50", "TS1N28HPCPUHDLVTB128X50M1S"),
+    ("sram_array_1p128x100m50", "TS1N28HPCPUHDLVTB128X100M1SW"),
+    ("sram_array_2p64x227m227", "TS6N28HPCPLVTA64X227M2S"),
+    ("sram_array_2p64x256m256", "TS6N28HPCPLVTA64X128M2S"),
+    ("sram_array_1p32x532m133", "TS1N28HPCPUHDLVTB32X133M2S"),
+    ("sram_array_1p128x1352m169", "TS1N28HPCPUHDLVTB128X169M1S"),
+    ("sram_array_1p256x64m64", "TS1N28HPCPUHDLVTB256X64M2S"),
+    ("sram_array_1p256x100m25", "TS1N28HPCPUHDLVTB256X100M2SW"),
+    ("sram_array_1p32x148m74", "TS1N28HPCPUHDLVTB32X148M1SW"),
+
+    ("sram_array_1p32x176m22", "TS1N28HPCPUHDLVTB32X176M1SW"),
+    ("sram_array_1p256x64m8", "TS1N28HPCPUHDLVTB256X64M2SW"),
+    ("sram_array_1p256x7m7", "TS1N28HPCPUHDLVTB256X7M2S"),
+    ("sram_array_1p256x512m256", "TS1N28HPCPUHDLVTB256X128M2S"),
+    ("sram_array_1p256x20m20", "TS1N28HPCPUHDLVTB256X20M2S"),
+    ("sram_array_1p15x537m179", "TS6N28HPCPLVTA15X179M2F"),
+
+    ("sram_array_1p16x256m256", "TS1N28HPCPUHDLVTB16X256M1S"),
+    ("sram_array_1p2048x128m128", "TS1N28HPCPUHDLVTB2048X128M4S"),
+    ("sram_array_1p2048x18m18", "TS1N28HPCPUHDLVTB2048X18M4S"),
+    ("sram_array_1p1024x40m4", "TS1N28HPCPUHDLVTB1024X40M4SW"),
+    ("sram_array_1p1024x190m19", "TS1N28HPCPUHDLVTB1024X95M4SW"),
+    ("sram_array_1p1024x60m6", "TS1N28HPCPUHDLVTB1024X60M4SW"),
+    ("sram_array_1p2048x56m7", "TS1N28HPCPUHDLVTB2048X56M4SW"),
+    ("sram_array_1p2048x144m18", "TS1N28HPCPUHDLVTB2048X144M4SW"),
+    ("sram_array_1p2048x48m6", "TS1N28HPCPUHDLVTB2048X48M4SW"),
+    ("sram_array_1p2048x7m7", "TS1N28HPCPLVTB2048X7M8S"),
+
+    ("sram_array_1p64x128m128", "TS1N28HPCPLVTB64X128M1S")
+  )
+  private val pat = s"sram_array_[12]p[0-9]+x[0-9]+m[0-9]+".r
+  def getSramInst(vname:String):String = {
+    val res = pat.findFirstIn(vname)
+    require(res.isDefined, s"$vname is illegal")
+    require(SramInstMap.contains(res.get), s"$vname is not found in map")
+    SramInstMap(res.get)
+  }
+
   def genRam(
     ew: Int,
     way: Int,
@@ -103,8 +150,8 @@ object SramHelper {
         mbistNodeNum,
         mbistArrayIds.max,
         bitWrite,
-        foundry,
-        sramInst,
+        SramHelper.foundry,
+        SramHelper.getSramInst(vname),
         0,
         "None",
         template
