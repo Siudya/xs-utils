@@ -28,7 +28,7 @@ class MbistCsvGen(val intf: InterfaceInfo, val pip: MbistPipeline, val csvName: 
       .foreach({
         case ((p, id), depth) =>
           contents += removeSubstring(p.holder.pathName) + p.nodeSuffix + ","
-          contents += p.vname + ".v,"
+          contents += p.vname + ".sv,"
           contents += id.toString + ","
           contents += (depth * 2 + p.latency).toString + ","
           contents += (if (p.bitWrite) "true," else "false,")
