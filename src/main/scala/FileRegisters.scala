@@ -3,15 +3,15 @@ package xs.utils
 import java.io.{File, FileWriter}
 
 object FileRegisters {
-  var files: Seq[(String, String, () => String)] = Nil
+  var files: Seq[(String, String, () => String, Boolean)] = Nil
 
   def add(filename: String, contents: => String): Unit = {
-    add("", filename, contents)
+    add("", filename, contents, false)
   }
 
-  def add(filedir: String, filename: String, contents: => String): Unit = {
+  def add(filedir: String, filename: String, contents: => String, dontCarePrefix: Boolean = false): Unit = {
     val fn = () => contents
-    files = (filedir, filename, fn) +: files
+    files = (filedir, filename, fn, dontCarePrefix) +: files
   }
 
   def contains(filename: String): Boolean = {
@@ -20,15 +20,16 @@ object FileRegisters {
 
   def write(fileDir: String = "./build", filePrefix: String = ""): Unit = {
     files.foreach {
-      case (fd, fn, fc) =>
-        writeOutputFile(fileDir, fd, filePrefix + fn, fc())
+      case (fd, fn, fc, df) =>
+        if(df) writeOutputFile(fileDir, fd, fn, fc())
+        else writeOutputFile(fileDir, fd, filePrefix + fn, fc())
     }
   }
 
   def writeOutputFile(td: String, fd: String, fn: String, fc: String): File = {
-    val dirStr = if (fd == "") td else s"$td/$fd"
+    val dirStr = if(fd == "") td else s"$td/$fd"
     val dir = new File(dirStr)
-    if (!dir.exists()) require(dir.mkdirs())
+    if(!dir.exists()) require(dir.mkdirs())
     val fname = s"$dirStr/$fn"
     val f = new File(fname)
     val fw = new FileWriter(f)
