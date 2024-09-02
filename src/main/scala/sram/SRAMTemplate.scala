@@ -130,7 +130,6 @@ class SRAMTemplate[T <: Data](
 
   val (resetState, resetSet) = (WireInit(false.B), WireInit(0.U))
 
-  require(multicycle == 1 & shouldReset || !shouldReset, "MCP rams do not support reset!")
   if (shouldReset) {
     withClockAndReset(cg.out_clock, reset) {
       val _resetState = RegInit(true.B)
