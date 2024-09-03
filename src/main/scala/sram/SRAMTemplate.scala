@@ -23,7 +23,6 @@ package xs.utils.sram
 import chisel3._
 import chisel3.util._
 import xs.utils.mbist.MbistClockGateCell
-import xs.utils.HoldUnless
 
 class SRAMBundleA(val set: Int) extends Bundle {
   val setIdx = Output(UInt(log2Up(set).W))
@@ -125,32 +124,34 @@ class SRAMTemplate[T <: Data](
     this
   )
   val sramName: String = vname
+  if(extraReset) require(shouldReset)
 
-  val extra_reset = if(extraReset) Some(IO(Input(Bool()))) else None
+  private val resetState = WireInit(false.B)
+  private val resetAddr = WireInit(0.U(log2Ceil(set + 1).W))
+  private val resetEarlyWen = WireInit(false.B)
+  private val resetWen = WireInit(false.B)
 
-  val (resetState, resetSet) = (WireInit(false.B), WireInit(0.U))
-
+  val extra_reset = if(extraReset) Some(IO(Input(AsyncReset()))) else None
   if(shouldReset) {
-    withClockAndReset(cg.out_clock, reset) {
-      val _resetState = RegInit(true.B)
-      val (_resetSet, resetFinish) = Counter(_resetState, set)
-      when(resetFinish) {
-        _resetState := false.B
-      }
-      if(extra_reset.isDefined) {
-        when(extra_reset.get) {
-          _resetState := true.B
-        }
-      }
-      resetState := _resetState
-      resetSet := _resetSet
+    val resetGen = Module(new SramResetGen(set, multicycle, holdMcp))
+    resetGen.clock := clock
+    if(extraReset) {
+      resetGen.reset := (extra_reset.get.asBool | reset.asBool).asAsyncReset
+    } else {
+      resetGen.reset := reset
+    }
+    resetState := resetGen.io.resetState
+    resetAddr := resetGen.io.waddr
+    resetWen := resetGen.io.wen
+    if(holdMcp) {
+      resetEarlyWen := resetGen.io.earlyWen.get
     }
   }
-  private val resetReg = RegNext(false.B, true.B)
-  private val wen = io.w.req.fire || resetState && !resetReg
+
+  private val wen = Mux(resetState, resetWen, io.w.req.fire)
   private val wmask = Mux(resetState, Fill(way, true.B), io.w.req.bits.waymask.getOrElse("b1".U))
   private val wdata = Mux(resetState, 0.U, io.w.req.bits.data.asUInt)
-  private val waddr = Mux(resetState, resetSet, io.w.req.bits.setIdx)
+  private val waddr = Mux(resetState, resetAddr, io.w.req.bits.setIdx)
   private val ren = io.r.req.fire
   private val raddr = io.r.req.bits.setIdx
 
@@ -192,7 +193,7 @@ class SRAMTemplate[T <: Data](
   renReg := Cat(ramRen, renReg) >> 1.U
 
   private val wenStretched = if(holdMcp) {
-    val ewe = if(hasMbist) mbistBd.ewe || io.earlyWen.get else io.earlyWen.get
+    val ewe = if(hasMbist) Mux(mbistBd.ack, mbistBd.ewe, io.earlyWen.get || resetEarlyWen) else io.earlyWen.get || resetEarlyWen
     val wens = RegInit(0.U((multicycle - 1).W))
     when(ewe) {
       wens := Fill(multicycle - 1, true.B)
@@ -205,7 +206,7 @@ class SRAMTemplate[T <: Data](
   }
 
   private val renStretched = if(holdMcp) {
-    val ere = if(hasMbist) mbistBd.ere || io.earlyRen.get else io.earlyRen.get
+    val ere = if(hasMbist) Mux(mbistBd.ack, mbistBd.ere, io.earlyRen.get) else io.earlyRen.get
     val rens = RegInit(0.U((multicycle - 1).W))
     when(ere) {
       rens := Fill(multicycle - 1, true.B)
@@ -268,7 +269,7 @@ class SRAMTemplate[T <: Data](
   private val reqVector = renReg | wenReg
   private val singleHold = if(singlePort) io.w.req.valid else false.B
   private val mcpHold = if(mcp) reqVector(multicycle - 1, 1).orR else false.B
-  private val resetHold = if(shouldReset) resetState || resetReg else false.B
+  private val resetHold = if(shouldReset) resetState else false.B
   io.r.req.ready := !mcpHold && !resetHold && !singleHold
   io.w.req.ready := !mcpHold && !resetHold
 }
