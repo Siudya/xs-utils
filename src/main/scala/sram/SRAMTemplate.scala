@@ -95,6 +95,7 @@ class SRAMTemplate[T <: Data](
   holdMcp: Boolean = false,
   hasMbist: Boolean = false,
   suffix: String = "",
+  powerCtl: Boolean = false,
   val foundry: String = "Unknown",
   val sramInst: String = "STANDARD")
   extends Module {
@@ -104,6 +105,7 @@ class SRAMTemplate[T <: Data](
     val earlyRen = if(holdMcp) Some(Input(Bool())) else None
     val w = Flipped(new SRAMWriteBus(gen, set, way))
     val earlyWen = if(holdMcp) Some(Input(Bool())) else None
+    val pwctl = if(powerCtl) Some(new SramPowerCtl) else None
   })
   require(multicycle >= 1)
   private val mcp = multicycle > 1
@@ -116,6 +118,7 @@ class SRAMTemplate[T <: Data](
     !singlePort,
     mcp,
     hasMbist,
+    io.pwctl,
     cg.out_clock,
     None,
     suffix,

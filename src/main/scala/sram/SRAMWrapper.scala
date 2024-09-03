@@ -5,15 +5,18 @@ import chisel3.util._
 import xs.utils.mbist.MbistPipeline
 
 class SRAMWrapper[T <: Data](
-  gen:        T,
-  set:        Int,
-  n:          Int = 1,
+  gen: T,
+  set: Int,
+  n: Int = 1,
   multicycle: Int = 1,
-  hasMbist:   Boolean = false)
-    extends Module {
+  hasMbist: Boolean = false,
+  powerCtl: Boolean,
+)
+  extends Module {
   val io = IO(new Bundle() {
     val r = Flipped(new SRAMReadBus(gen, set, 1))
     val w = Flipped(new SRAMWriteBus(gen, set, 1))
+    val pwctl = if(powerCtl) Some(new SramPowerCtl) else None
   })
   require(set % n == 0)
   require((1 << log2Ceil(n)) == n)
@@ -23,13 +26,13 @@ class SRAMWrapper[T <: Data](
   private val selBits = log2Ceil(n)
   private val innerSetBits = log2Up(set) - selBits
   private val r_setIdx = io.r.req.bits.setIdx(innerSetBits - 1, 0)
-  private val r_sel = if (n == 1) 0.U else io.r.req.bits.setIdx(innerSetBits + selBits - 1, innerSetBits)
+  private val r_sel = if(n == 1) 0.U else io.r.req.bits.setIdx(innerSetBits + selBits - 1, innerSetBits)
   private val w_setIdx = io.w.req.bits.setIdx(innerSetBits - 1, 0)
-  private val w_sel = if (n == 1) 0.U else io.w.req.bits.setIdx(innerSetBits + selBits - 1, innerSetBits)
+  private val w_sel = if(n == 1) 0.U else io.w.req.bits.setIdx(innerSetBits + selBits - 1, innerSetBits)
 
   val banks: Seq[SRAMTemplate[T]] = (0 until n).map { i =>
-    val ren = if (n == 1) true.B else i.U === r_sel
-    val wen = if (n == 1) true.B else i.U === w_sel
+    val ren = if(n == 1) true.B else i.U === r_sel
+    val wen = if(n == 1) true.B else i.U === w_sel
     val sram = Module(
       new SRAMTemplate[T](
         gen,
@@ -40,12 +43,12 @@ class SRAMWrapper[T <: Data](
         hasMbist = hasMbist
       )
     )
-
     sram.clock := clock
     sram.io.r.req.valid := io.r.req.valid && ren
     sram.io.r.req.bits.apply(r_setIdx)
     sram.io.w.req.valid := io.w.req.valid && wen
     sram.io.w.req.bits.apply(io.w.req.bits.data(0), w_setIdx, 1.U)
+    if(powerCtl) sram.io.pwctl.get := io.pwctl.get
     sram
   }
   private val mbistPl = MbistPipeline.PlaceMbistPipeline(1, place = hasMbist)

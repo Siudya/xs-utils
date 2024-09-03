@@ -1,9 +1,8 @@
-package sram
+package xs.utils.sram
 
 import chisel3._
 import chisel3.util._
 import xs.utils.HoldUnless
-import xs.utils.sram.{SRAMReadBus, SRAMTemplate, SRAMWriteBus}
 
 class FoldedSRAMTemplate[T <: Data](
   gen: T,
@@ -17,12 +16,14 @@ class FoldedSRAMTemplate[T <: Data](
   bypassWrite: Boolean = false,
   multicycle: Int = 1,
   hasMbist: Boolean = false,
+  powerCtl: Boolean,
   foundry: String = "Unknown",
   sramInst: String = "STANDARD")
   extends Module {
   val io = IO(new Bundle {
     val r = Flipped(new SRAMReadBus(gen, set, way))
     val w = Flipped(new SRAMWriteBus(gen, set, way))
+    val pwctl = if(powerCtl) Some(new SramPowerCtl) else None
   })
   val extra_reset = if(extraReset) Some(IO(Input(Bool()))) else None
   //   |<----- setIdx ----->|
@@ -46,13 +47,13 @@ class FoldedSRAMTemplate[T <: Data](
       singlePort = singlePort,
       multicycle = multicycle,
       hasMbist = hasMbist,
+      powerCtl = powerCtl,
       foundry = foundry,
       sramInst = sramInst
     )
   )
-  if(array.extra_reset.isDefined) {
-    array.extra_reset.get := extra_reset.get
-  }
+  if(array.extra_reset.isDefined) array.extra_reset.get := extra_reset.get
+  if(powerCtl) array.io.pwctl.get := io.pwctl.get
 
   io.r.req.ready := array.io.r.req.ready
   io.w.req.ready := array.io.w.req.ready

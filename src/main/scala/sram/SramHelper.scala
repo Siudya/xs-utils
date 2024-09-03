@@ -21,7 +21,7 @@ object SramHelper {
     val numVec = (1 to dataNum1toNNode)
     val validVec = numVec.map(num => (way % num == 0) && (way >= num))
     val validNum = numVec.zip(validVec).filter(_._2)
-    val res = if (validNum.isEmpty) (1, way) else validNum.last
+    val res = if(validNum.isEmpty) (1, way) else validNum.last
     (res._1, way / res._1)
   }
 
@@ -38,7 +38,7 @@ object SramHelper {
     val goodNodeNumForEachWay = dw / validDivisors.max
     val defaultNodeNumForEachWay = ((dw + mw - 1) / mw)
     val finalNodeNumForEachWay =
-      if (goodNodeNumForEachWay > 4 * defaultNodeNumForEachWay) defaultNodeNumForEachWay else goodNodeNumForEachWay
+      if(goodNodeNumForEachWay > 4 * defaultNodeNumForEachWay) defaultNodeNumForEachWay else goodNodeNumForEachWay
     (finalNodeNumForEachWay, way * finalNodeNumForEachWay)
   }
 
@@ -58,16 +58,17 @@ object SramHelper {
   }
 
   def genRam(
-    ew:       Int,
-    way:      Int,
-    set:      Int,
-    dp:       Boolean,
-    mcp:      Boolean,
-    bist:     Boolean,
-    rclk:     Clock,
-    wclk:     Option[Clock],
-    suffix:   String,
-    foundry:  String,
+    ew: Int,
+    way: Int,
+    set: Int,
+    dp: Boolean,
+    mcp: Boolean,
+    bist: Boolean,
+    pwctl: Option[SramPowerCtl],
+    rclk: Clock,
+    wclk: Option[Clock],
+    suffix: String,
+    foundry: String,
     sramInst: String,
     template: RawModule
   ): (Ram2Mbist, SramBroadcastBundle, Instance[SramArray], Int, Int, String) = {
@@ -81,14 +82,14 @@ object SramHelper {
     val mbistDataWidth1toN = wayNumForEachNode * ew
     val maskWidth1toN = wayNumForEachNode
 
-    val mbistNodeNum = if (isNto1) mbistNodeNumNto1 else mbistNodeNum1toN
-    val mbistDataWidth = if (isNto1) mbistDataWidthNto1 else mbistDataWidth1toN
-    val mbistMaskWidth = if (isNto1) maskWidthNto1 else maskWidth1toN
+    val mbistNodeNum = if(isNto1) mbistNodeNumNto1 else mbistNodeNum1toN
+    val mbistDataWidth = if(isNto1) mbistDataWidthNto1 else mbistDataWidth1toN
+    val mbistMaskWidth = if(isNto1) maskWidthNto1 else maskWidth1toN
     val mbistArrayIds = Seq.tabulate(mbistNodeNum)(idx => getDomainID + idx)
     val bitWrite = way != 1
     val sramMaskBits = if(isNto1) mbistNodeNum else way
 
-    val (array, vname) = SramProto(rclk, !dp, set, ew * way, sramMaskBits, mcp, wclk, bist, suffix)
+    val (array, vname) = SramProto(rclk, !dp, set, ew * way, sramMaskBits, mcp, wclk, bist, suffix, pwctl.isDefined)
     val bdParam =
       Ram2MbistParams(
         set,
@@ -106,7 +107,7 @@ object SramHelper {
         "None",
         template
       )
-    val mbist = if (bist) Some(IO(new Ram2Mbist(bdParam))) else None
+    val mbist = if(bist) Some(IO(new Ram2Mbist(bdParam))) else None
     val mbistBundle = Wire(new Ram2Mbist(bdParam))
     mbistBundle := DontCare
     mbistBundle.selectedOH := Fill(mbistBundle.selectedOH.getWidth, 1.U(1.W))
@@ -116,13 +117,13 @@ object SramHelper {
     mbistBundle.wmask := Fill(mbistMaskWidth, true.B)
     val broadCastSignals = Wire(new SramBroadcastBundle)
     broadCastSignals := DontCare
-    if (bist) {
+    if(bist) {
       dontTouch(mbist.get)
       mbist.get := DontCare
       mbist.get.suggestName("mbist")
       mbistBundle <> mbist.get
       Mbist.addRamNode(mbist.get, mbistArrayIds)
-      val addId = if (isNto1) mbistNodeNumNto1 else mbistNodeNum1toN
+      val addId = if(isNto1) mbistNodeNumNto1 else mbistNodeNum1toN
       nodeId += addId
       increaseDomainID(addId)
       val broadcast = IO(new SramBroadcastBundle)
@@ -134,6 +135,7 @@ object SramHelper {
       array.mbist.get.dft_ram_bp_clken := broadcast.ram_bp_clken
       array.mbist.get.dft_ram_bypass := broadcast.ram_bypass
     }
+    if(pwctl.isDefined) array.pwctl.get := pwctl.get
     (mbistBundle, broadCastSignals, array, mbistNodeNum, sramMaskBits, vname)
   }
 }
