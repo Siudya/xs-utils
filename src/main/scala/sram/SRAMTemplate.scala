@@ -1,20 +1,20 @@
 /** *************************************************************************************
-  * Copyright (c) 2020 Institute of Computing Technology, CAS
-  * Copyright (c) 2020 University of Chinese Academy of Sciences
-  * Copyright (c) 2020-2021 Peng Cheng Laboratory
-  *
-  * NutShell is licensed under Mulan PSL v2.
-  * You can use this software according to the terms and conditions of the Mulan PSL v2.
-  * You may obtain a copy of Mulan PSL v2 at:
-  * http://license.coscl.org.cn/MulanPSL2
-  *
-  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER
-  * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR
-  * FIT FOR A PARTICULAR PURPOSE.
-  *
-  * See the Mulan PSL v2 for more details.
-  * *************************************************************************************
-  */
+ * Copyright (c) 2020 Institute of Computing Technology, CAS
+ * Copyright (c) 2020 University of Chinese Academy of Sciences
+ * Copyright (c) 2020-2021 Peng Cheng Laboratory
+ *
+ * NutShell is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ * http://license.coscl.org.cn/MulanPSL2
+ *
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR
+ * FIT FOR A PARTICULAR PURPOSE.
+ *
+ * See the Mulan PSL v2 for more details.
+ * *************************************************************************************
+ */
 
 // See LICENSE.SiFive for license details.
 
@@ -36,7 +36,7 @@ class SRAMBundleA(val set: Int) extends Bundle {
 
 class SRAMBundleAW[T <: Data](private val gen: T, set: Int, val way: Int = 1) extends SRAMBundleA(set) {
   val data = Output(Vec(way, gen))
-  val waymask = if (way > 1) Some(Output(UInt(way.W))) else None
+  val waymask = if(way > 1) Some(Output(UInt(way.W))) else None
 
   def apply(data: Vec[T], setIdx: UInt, waymask: UInt): SRAMBundleAW[T] = {
     super.apply(setIdx)
@@ -84,21 +84,21 @@ class SRAMWriteBus[T <: Data](private val gen: T, val set: Int, val way: Int = 1
 
 // WARNING: this SRAMTemplate assumes the SRAM lib itself supports holdRead.
 class SRAMTemplate[T <: Data](
-  gen:          T,
-  set:          Int,
-  way:          Int = 1,
-  singlePort:   Boolean = false,
-  shouldReset:  Boolean = false,
-  extraReset:   Boolean = false,
-  holdRead:     Boolean = false,
-  bypassWrite:  Boolean = false,
-  multicycle:   Int = 1,
-  holdMcp:      Boolean = false,
-  hasMbist:     Boolean = false,
-  suffix:       String = "",
-  val foundry:  String = "Unknown",
+  gen: T,
+  set: Int,
+  way: Int = 1,
+  singlePort: Boolean = false,
+  shouldReset: Boolean = false,
+  extraReset: Boolean = false,
+  holdRead: Boolean = false,
+  bypassWrite: Boolean = false,
+  multicycle: Int = 1,
+  holdMcp: Boolean = false,
+  hasMbist: Boolean = false,
+  suffix: String = "",
+  val foundry: String = "Unknown",
   val sramInst: String = "STANDARD")
-    extends Module {
+  extends Module {
 
   val io = IO(new Bundle {
     val r = Flipped(new SRAMReadBus(gen, set, way))
@@ -124,20 +124,20 @@ class SRAMTemplate[T <: Data](
     sramInst,
     this
   )
-  val sramName:String = vname
+  val sramName: String = vname
 
-  val extra_reset = if (extraReset) Some(IO(Input(Bool()))) else None
+  val extra_reset = if(extraReset) Some(IO(Input(Bool()))) else None
 
   val (resetState, resetSet) = (WireInit(false.B), WireInit(0.U))
 
-  if (shouldReset) {
+  if(shouldReset) {
     withClockAndReset(cg.out_clock, reset) {
       val _resetState = RegInit(true.B)
       val (_resetSet, resetFinish) = Counter(_resetState, set)
       when(resetFinish) {
         _resetState := false.B
       }
-      if (extra_reset.isDefined) {
+      if(extra_reset.isDefined) {
         when(extra_reset.get) {
           _resetState := true.B
         }
@@ -154,10 +154,10 @@ class SRAMTemplate[T <: Data](
   private val ren = io.r.req.fire
   private val raddr = io.r.req.bits.setIdx
 
-  private val ramWen = if (hasMbist) Mux(mbistBd.ack, mbistBd.we, wen) else wen
-  private val ramWaddr = if (hasMbist & singlePort) {
+  private val ramWen = if(hasMbist) Mux(mbistBd.ack, mbistBd.we, wen) else wen
+  private val ramWaddr = if(hasMbist & singlePort) {
     Mux(mbistBd.ack, mbistBd.addr_rd, waddr)
-  } else if (hasMbist & !singlePort) {
+  } else if(hasMbist & !singlePort) {
     Mux(mbistBd.ack, mbistBd.addr, waddr)
   } else {
     waddr
@@ -181,10 +181,10 @@ class SRAMTemplate[T <: Data](
   }
 
   private val mbistWdata = Fill(nodeNum, mbistBd.wdata)
-  private val ramWmask = if (hasMbist) Mux(mbistBd.ack, mbistWmask, funcWmask) else funcWmask
-  private val ramWdata = if (hasMbist) Mux(mbistBd.ack, mbistWdata, wdata) else wdata
-  private val ramRen = if (hasMbist) Mux(mbistBd.ack, mbistBd.re, ren) else ren
-  private val ramRaddr = if (hasMbist) Mux(mbistBd.ack, mbistBd.addr_rd, raddr) else raddr
+  private val ramWmask = if(hasMbist) Mux(mbistBd.ack, mbistWmask, funcWmask) else funcWmask
+  private val ramWdata = if(hasMbist) Mux(mbistBd.ack, mbistWdata, wdata) else wdata
+  private val ramRen = if(hasMbist) Mux(mbistBd.ack, mbistBd.re, ren) else ren
+  private val ramRaddr = if(hasMbist) Mux(mbistBd.ack, mbistBd.addr_rd, raddr) else raddr
 
   private val wenReg = RegInit(0.U(multicycle.W))
   private val renReg = RegInit(0.U(multicycle.W))
@@ -229,7 +229,7 @@ class SRAMTemplate[T <: Data](
   cg.E := ren | wen
 
   private val concurrentRW = io.w.req.fire && io.r.req.fire && io.w.req.bits.setIdx === io.r.req.bits.setIdx
-  private val doBypass = if (bypassWrite) concurrentRW else false.B
+  private val doBypass = if(bypassWrite) concurrentRW else false.B
   private val doBypassReg = RegEnable(doBypass, false.B, io.r.req.fire)
   private val wmaskReg = RegEnable(wmask, 0.U, doBypass & io.r.req.fire)
   private val segment = dataWidth / wmask.getWidth
@@ -237,7 +237,7 @@ class SRAMTemplate[T <: Data](
   private val keepMask = Cat(Seq.tabulate(wmask.getWidth)(i => !wmaskReg(i / segment).asBool).reverse)
   private val rdataReg = Reg(UInt(dataWidth.W))
   private val bypassData = bypassMask & rdataReg | keepMask & ramRdata
-  if (bypassWrite) {
+  if(bypassWrite) {
     when(doBypass) {
       rdataReg := wdata.asUInt
     }.elsewhen(renReg(0)) {
@@ -249,11 +249,11 @@ class SRAMTemplate[T <: Data](
     }
   }
 
-  if (!bypassWrite && !holdRead) {
+  if(!bypassWrite && !holdRead) {
     io.r.resp.data := ramRdata.asTypeOf(io.r.resp.data)
-  } else if (!bypassWrite && holdRead) {
+  } else if(!bypassWrite && holdRead) {
     io.r.resp.data := Mux(renReg(0), ramRdata, rdataReg).asTypeOf(io.r.resp.data)
-  } else if (bypassWrite && !holdRead) {
+  } else if(bypassWrite && !holdRead) {
     io.r.resp.data := Mux(doBypassReg, bypassData, ramRdata).asTypeOf(io.r.resp.data)
   } else {
     when(renReg(0)) {
@@ -266,90 +266,9 @@ class SRAMTemplate[T <: Data](
   mbistBd.rdata := Mux1H(selectOHReg, rdataReg.asTypeOf(Vec(nodeNum, UInt((dataWidth / nodeNum).W))))
 
   private val reqVector = renReg | wenReg
-  private val singleHold = if (singlePort) io.w.req.valid else false.B
-  private val mcpHold = if (mcp) reqVector(multicycle - 1, 1).orR else false.B
-  private val resetHold = if (shouldReset) resetState || resetReg else false.B
+  private val singleHold = if(singlePort) io.w.req.valid else false.B
+  private val mcpHold = if(mcp) reqVector(multicycle - 1, 1).orR else false.B
+  private val resetHold = if(shouldReset) resetState || resetReg else false.B
   io.r.req.ready := !mcpHold && !resetHold && !singleHold
   io.w.req.ready := !mcpHold && !resetHold
-}
-
-class FoldedSRAMTemplate[T <: Data](
-  gen:         T,
-  set:         Int,
-  way:         Int = 1,
-  width:       Int = 4,
-  singlePort:  Boolean = false,
-  shouldReset: Boolean = false,
-  extraReset:  Boolean = false,
-  holdRead:    Boolean = false,
-  bypassWrite: Boolean = false,
-  multicycle:  Int = 1,
-  hasMbist:    Boolean = false,
-  foundry:     String = "Unknown",
-  sramInst:    String = "STANDARD")
-    extends Module {
-  val io = IO(new Bundle {
-    val r = Flipped(new SRAMReadBus(gen, set, way))
-    val w = Flipped(new SRAMWriteBus(gen, set, way))
-  })
-  val extra_reset = if (extraReset) Some(IO(Input(Bool()))) else None
-  //   |<----- setIdx ----->|
-  //   | ridx | width | way |
-
-  require(width > 0 && isPow2(width))
-  require(way > 0 && isPow2(way))
-  require(set % width == 0)
-
-  private val nRows = set / width
-
-  private val array = Module(
-    new SRAMTemplate(
-      gen,
-      set = nRows,
-      way = width * way,
-      shouldReset = shouldReset,
-      extraReset = extraReset,
-      holdRead = holdRead,
-      bypassWrite = bypassWrite,
-      singlePort = singlePort,
-      multicycle = multicycle,
-      hasMbist = hasMbist,
-      foundry = foundry,
-      sramInst = sramInst
-    )
-  )
-  if (array.extra_reset.isDefined) {
-    array.extra_reset.get := extra_reset.get
-  }
-
-  io.r.req.ready := array.io.r.req.ready
-  io.w.req.ready := array.io.w.req.ready
-
-  private val raddr = io.r.req.bits.setIdx >> log2Ceil(width)
-  private val ridx = RegNext(if (width != 1) io.r.req.bits.setIdx(log2Ceil(width) - 1, 0) else 0.U(1.W))
-  private val ren = io.r.req.valid
-
-  array.io.r.req.valid := ren
-  array.io.r.req.bits.setIdx := raddr
-
-  private val rdata = array.io.r.resp.data
-  for (w <- 0 until way) {
-    val wayData = VecInit(rdata.indices.filter(_ % way == w).map(rdata(_)))
-    val holdRidx = HoldUnless(ridx, RegNext(io.r.req.valid))
-    val realRidx = if (holdRead) holdRidx else ridx
-    io.r.resp.data(w) := Mux1H(UIntToOH(realRidx, width), wayData)
-  }
-
-  private val wen = io.w.req.valid
-  private val wdata = VecInit(Seq.fill(width)(io.w.req.bits.data).flatten)
-  private val waddr = io.w.req.bits.setIdx >> log2Ceil(width)
-  private val widthIdx = if (width != 1) io.w.req.bits.setIdx(log2Ceil(width) - 1, 0) else 0.U
-  private val wmask = (width, way) match {
-    case (1, 1) => 1.U(1.W)
-    case (x, 1) => UIntToOH(widthIdx)
-    case _ =>
-      VecInit(Seq.tabulate(width * way)(n => (n / way).U === widthIdx && io.w.req.bits.waymask.get(n % way))).asUInt
-  }
-  require(wmask.getWidth == way * width)
-  array.io.w.apply(wen, wdata, waddr, wmask)
 }
