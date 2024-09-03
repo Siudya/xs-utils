@@ -6,7 +6,8 @@ import chisel3.util._
 class SramResetGen(
   set: Int,
   multicycle: Int,
-  holdMcp: Boolean
+  holdMcp: Boolean,
+  resetDelay: Int = 4
 ) extends Module {
   private val setBits = log2Ceil(set)
   val io = IO(new Bundle {
@@ -17,7 +18,8 @@ class SramResetGen(
   })
   private val resetCounter = RegInit((set - 1).U(setBits.W))
   private val resetState = RegInit(true.B)
-  private val resetHold = RegNext(false.B, true.B)
+  private val resetHold = RegInit(Fill(resetDelay, true.B))
+  resetHold := Cat(0.U(1.W), resetHold(resetDelay - 1, 1))
   private val step = Wire(Bool())
   if(multicycle > 1) {
     if(holdMcp) require(multicycle == 2)
@@ -27,11 +29,11 @@ class SramResetGen(
       wens := Cat(wens(0), wens)(multicycle, 1)
       upds := Cat(io.wen, upds)(multicycle - 1, 1)
     }
-    io.earlyWen.foreach(_ := wens(multicycle - 1) && !resetHold)
-    io.wen := wens(multicycle - 2) && !resetHold
+    io.earlyWen.foreach(_ := wens(multicycle - 1) && !resetHold(0))
+    io.wen := wens(multicycle - 2) && !resetHold(0)
     step := upds(0)
   } else {
-    io.wen := resetState && !resetHold
+    io.wen := resetState && !resetHold(0)
     step := resetState
   }
   when(step) {

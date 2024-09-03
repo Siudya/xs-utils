@@ -119,6 +119,7 @@ class SRAMTemplate[T <: Data](
     mcp,
     hasMbist,
     io.pwctl,
+    reset,
     cg.out_clock,
     None,
     suffix,

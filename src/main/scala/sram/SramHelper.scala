@@ -65,6 +65,7 @@ object SramHelper {
     mcp: Boolean,
     bist: Boolean,
     pwctl: Option[SramPowerCtl],
+    reset: Reset,
     rclk: Clock,
     wclk: Option[Clock],
     suffix: String,
@@ -135,7 +136,10 @@ object SramHelper {
       array.mbist.get.dft_ram_bp_clken := broadcast.ram_bp_clken
       array.mbist.get.dft_ram_bypass := broadcast.ram_bypass
     }
-    if(pwctl.isDefined) array.pwctl.get := pwctl.get
+    if(pwctl.isDefined) {
+      array.pwctl.get.ret := pwctl.get.ret
+      array.pwcyl.get.stop := pwctl.get.stop | reset
+    }
     (mbistBundle, broadCastSignals, array, mbistNodeNum, sramMaskBits, vname)
   }
 }
