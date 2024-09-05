@@ -138,7 +138,7 @@ object SramHelper {
     }
     if(pwctl.isDefined) {
       array.pwctl.get.ret := pwctl.get.ret
-      array.pwcyl.get.stop := pwctl.get.stop | reset.asBool
+      array.pwctl.get.stop := pwctl.get.stop | reset.asBool
     }
     (mbistBundle, broadCastSignals, array, mbistNodeNum, sramMaskBits, vname)
   }
