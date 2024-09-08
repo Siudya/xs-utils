@@ -108,22 +108,18 @@ object SramHelper {
         "None",
         template
       )
-    val mbist = if(bist) Some(IO(new Ram2Mbist(bdParam))) else None
-    val mbistBundle = Wire(new Ram2Mbist(bdParam))
-    mbistBundle := DontCare
-    mbistBundle.selectedOH := Fill(mbistBundle.selectedOH.getWidth, 1.U(1.W))
-    mbistBundle.ack := false.B
-    mbistBundle.we := false.B
-    mbistBundle.re := false.B
-    mbistBundle.wmask := Fill(mbistMaskWidth, true.B)
+    val mbist = Wire(new Ram2Mbist(bdParam))
+    mbist := DontCare
+    mbist.selectedOH := Fill(mbist.selectedOH.getWidth, 1.U(1.W))
+    mbist.ack := false.B
+    mbist.we := false.B
+    mbist.re := false.B
+    mbist.wmask := Fill(mbistMaskWidth, true.B)
     val broadCastSignals = Wire(new SramBroadcastBundle)
     broadCastSignals := DontCare
     if(bist) {
-      dontTouch(mbist.get)
-      mbist.get := DontCare
-      mbist.get.suggestName("mbist")
-      mbistBundle <> mbist.get
-      Mbist.addRamNode(mbist.get, mbistArrayIds)
+      dontTouch(mbist)
+      Mbist.addRamNode(mbist, mbistArrayIds)
       val addId = if(isNto1) mbistNodeNumNto1 else mbistNodeNum1toN
       nodeId += addId
       increaseDomainID(addId)
@@ -140,6 +136,6 @@ object SramHelper {
       array.pwctl.get.ret := pwctl.get.ret
       array.pwctl.get.stop := pwctl.get.stop | reset.asBool
     }
-    (mbistBundle, broadCastSignals, array, mbistNodeNum, sramMaskBits, vname)
+    (mbist, broadCastSignals, array, mbistNodeNum, sramMaskBits, vname)
   }
 }
