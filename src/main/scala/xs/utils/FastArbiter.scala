@@ -1,18 +1,18 @@
-/***************************************************************************************
-* Copyright (c) 2020-2021 Institute of Computing Technology, Chinese Academy of Sciences
-* Copyright (c) 2020-2021 Peng Cheng Laboratory
-*
-* XiangShan is licensed under Mulan PSL v2.
-* You can use this software according to the terms and conditions of the Mulan PSL v2.
-* You may obtain a copy of Mulan PSL v2 at:
-*          http://license.coscl.org.cn/MulanPSL2
-*
-* THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
-* EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
-* MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
-*
-* See the Mulan PSL v2 for more details.
-***************************************************************************************/
+/** *************************************************************************************
+ * Copyright (c) 2020-2021 Institute of Computing Technology, Chinese Academy of Sciences
+ * Copyright (c) 2020-2021 Peng Cheng Laboratory
+ *
+ * XiangShan is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ * http://license.coscl.org.cn/MulanPSL2
+ *
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ *
+ * See the Mulan PSL v2 for more details.
+ * ************************************************************************************* */
 
 package xs.utils
 
@@ -23,7 +23,7 @@ abstract class FastArbiterBase[T <: Data](val gen: T, val n: Int) extends Module
   val io = IO(new ArbiterIO[T](gen, n))
 
   def maskToOH(seq: Seq[Bool]) = {
-    seq.zipWithIndex.map{
+    seq.zipWithIndex.map {
       case (b, 0) => b
       case (b, i) => b && !Cat(seq.take(i)).orR
     }
@@ -56,7 +56,7 @@ class FastArbiter[T <: Data](gen: T, n: Int) extends FastArbiterBase[T](gen, n) 
   io.out.valid := valids.orR
   io.out.bits := Mux1H(chosenOH, io.in.map(_.bits))
 
-  io.in.map(_.ready).zip(chosenOH.asBools).foreach{
+  io.in.map(_.ready).zip(chosenOH.asBools).foreach {
     case (rdy, grant) => rdy := grant && io.out.ready
   }
 
@@ -103,4 +103,13 @@ class LatchFastArbiter[T <: Data](gen: T, n: Int) extends FastArbiterBase[T](gen
   io.out.valid := out_valid_reg && valids(OHToUInt(chosen_reg))
   io.out.bits <> out_bits_reg
   io.chosen := OHToUInt(chosen_reg)
+}
+
+object FastArbiter {
+  def apply[T <: Data](in: Seq[DecoupledIO[T]], out: DecoupledIO[T], name: Option[String] = None): Unit = {
+    val arb = Module(new FastArbiter[T](chiselTypeOf(out.bits), in.size))
+    if(name.nonEmpty) arb.suggestName(s"${name.get}_arb")
+    for((a, req) <- arb.io.in.zip(in)) a <> req
+    out <> arb.io.out
+  }
 }
