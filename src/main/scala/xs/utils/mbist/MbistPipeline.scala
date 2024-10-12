@@ -1,19 +1,19 @@
 /** *************************************************************************************
-  * Copyright (c) 2020-2022 Institute of Computing Technology, Chinese Academy of Sciences
-  * Copyright (c) 2020-2022 Peng Cheng Laboratory
-  *
-  * XiangShan is licensed under Mulan PSL v2.
-  * You can use this software according to the terms and conditions of the Mulan PSL v2.
-  * You may obtain a copy of Mulan PSL v2 at:
-  * http://license.coscl.org.cn/MulanPSL2
-  *
-  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
-  * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
-  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
-  *
-  * See the Mulan PSL v2 for more details.
-  * *************************************************************************************
-  */
+ * Copyright (c) 2020-2022 Institute of Computing Technology, Chinese Academy of Sciences
+ * Copyright (c) 2020-2022 Peng Cheng Laboratory
+ *
+ * XiangShan is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ * http://license.coscl.org.cn/MulanPSL2
+ *
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ *
+ * See the Mulan PSL v2 for more details.
+ * *************************************************************************************
+ */
 
 package xs.utils.mbist
 
@@ -40,13 +40,13 @@ class MbitsStandardInterface(val params: MbistBusParams) extends Bundle {
 }
 
 case class InterfaceInfo(
-  name:        String,
-  addrWidth:   Int,
-  dataWidth:   Int,
-  arrayWidth:  Int,
-  beWidth:     Int,
+  name: String,
+  addrWidth: Int,
+  dataWidth: Int,
+  arrayWidth: Int,
+  beWidth: Int,
   hasDualPort: Boolean) {
-  override def toString = s"$name,$addrWidth,$dataWidth,$arrayWidth,$beWidth," + (if (hasDualPort) "true" else "false")
+  override def toString = s"$name,$addrWidth,$dataWidth,$arrayWidth,$beWidth," + (if(hasDualPort) "true" else "false")
 }
 
 class MbistInterface(params: Seq[MbistBusParams], ids: Seq[Seq[Int]], name: String, pipelineNum: Int) extends Module {
@@ -76,13 +76,13 @@ class MbistInterface(params: Seq[MbistBusParams], ids: Seq[Seq[Int]], name: Stri
   private val inData = mbist.indata
   private val re = mbist.readen
   private val addrRd = mbist.addr_rd
-  private val hit = if (params.length > 1) ids.map(item => item.map(_.U === array).reduce(_ | _)) else Seq(true.B)
+  private val hit = if(params.length > 1) ids.map(item => item.map(_.U === array).reduce(_ | _)) else Seq(true.B)
   private val outDataVec = toPipeline.map(_.mbist_outdata)
   mbist.outdata := Mux1H(hit.zip(outDataVec))
   private val ackVec = toPipeline.map(_.mbist_ack)
   mbist.ack := Mux1H(hit.zip(ackVec))
 
-  for (pip <- toPipeline) {
+  for(pip <- toPipeline) {
     pip.mbist_array := array
     pip.mbist_all := all
     pip.mbist_req := req
@@ -99,11 +99,11 @@ object MbistPipeline {
   private var uniqueId = 0
 
   def PlaceMbistPipeline(
-    level:      Int,
+    level: Int,
     moduleName: String = s"MbistPipeline_${uniqueId}",
-    place:      Boolean = true
+    place: Boolean = true
   ): Option[MbistPipeline] = {
-    if (place) {
+    if(place) {
       val thisNode = Mbist.addController(level)
       uniqueId += 1
       val pipelineNodes =
@@ -164,15 +164,15 @@ object MbistPipeline {
 }
 
 class MbistPipeline(level: Int, moduleName: String = s"MbistPipeline_${uniqueId}", val myNode: PipelineBaseNode)
-    extends Module {
+  extends Module {
   override val desiredName = moduleName
 
   def registerCSV(intf: InterfaceInfo, csvName: String): Unit = {
     val gen = new MbistCsvGen(intf, this, csvName)
-    FileRegisters.add("mbist", s"$csvName.csv", gen.generate)
+    FileRegisters.add("xs/utils/mbist", s"$csvName.csv", gen.generate)
   }
 
-  if (Mbist.isMaxLevel(level)) {
+  if(Mbist.isMaxLevel(level)) {
     //Within every mbist domain, sram arrays are indexed from 0
     SramHelper.restartIndexing()
   }
@@ -197,7 +197,7 @@ class MbistPipeline(level: Int, moduleName: String = s"MbistPipeline_${uniqueId}
   private val dataValid = activated & (ere | ewe)
 
   private val pipelineNodesAck =
-    if (pipelineNodes.nonEmpty) toNextPipeline.map(_.mbist_ack).reduce(_ | _) else true.B
+    if(pipelineNodes.nonEmpty) toNextPipeline.map(_.mbist_ack).reduce(_ | _) else true.B
 
   private val arrayReg = RegEnable(mbist.mbist_array, 0.U, activated)
   private val reqReg = RegNext(mbist.mbist_req, 0.U)
