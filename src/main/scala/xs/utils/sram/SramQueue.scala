@@ -18,11 +18,11 @@
 
 // See LICENSE.SiFive for license details.
 
-package xs.utils
+package xs.utils.sram
 
 import chisel3._
 import chisel3.util._
-import chisel3.experimental.{requireIsChiselType, Direction}
+import chisel3.experimental.{Direction, requireIsChiselType}
 import org.chipsalliance.cde.config.Parameters
 import xs.utils.mbist.MbistPipeline
 
