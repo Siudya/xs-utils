@@ -1,8 +1,10 @@
 package xs.utils.perf
+
 import chisel3._
 import xs.utils.perf.XSLogLevel.XSLogLevel
 import org.chipsalliance.cde.config.Parameters
 import xs.utils.GTimer
+
 object XSLogLevel extends Enumeration {
   type XSLogLevel = Value
   val ALL   = Value(0, "ALL  ")
