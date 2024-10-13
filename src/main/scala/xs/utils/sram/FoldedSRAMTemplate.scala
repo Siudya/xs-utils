@@ -16,7 +16,7 @@ class FoldedSRAMTemplate[T <: Data](
   bypassWrite: Boolean = false,
   multicycle: Int = 1,
   hasMbist: Boolean = false,
-  powerCtl: Boolean,
+  powerCtl: Boolean = false,
   foundry: String = "Unknown",
   sramInst: String = "STANDARD")
   extends Module {
