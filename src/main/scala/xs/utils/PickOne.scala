@@ -7,7 +7,7 @@ class IdxGenerator(entryNum:Int) extends Module {
     val entriesValidBitVec = Input(UInt(entryNum.W))
     val entryIndexOH = Valid(UInt(idxWidth.W))
   })
-  private val idxOHList = Seq.tabulate(entryNum)(idx => (1 << idx).U(idxWidth.W))
+  private val idxOHList = Seq.tabulate(entryNum)(idx => UIntToOH(idx.U, idxWidth))
   private val candidates = io.entriesValidBitVec.asBools zip idxOHList
   private def validMux(a:(Bool,UInt), b:(Bool,UInt)) : (Bool,UInt) = {
     val resData = Mux(a._1, a._2, b._2)
