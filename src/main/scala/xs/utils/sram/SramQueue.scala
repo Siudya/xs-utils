@@ -41,7 +41,7 @@ import xs.utils.mbist.MbistPipeline
  * consumer.io.in <> q.io.deq
  * }}}
  */
-class SRAMQueue[T <: Data](
+class SramQueue[T <: Data](
   val gen: T,
   val entries: Int,
   val pipe: Boolean = false,
