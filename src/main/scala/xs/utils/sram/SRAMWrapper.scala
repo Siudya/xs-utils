@@ -10,7 +10,7 @@ class SRAMWrapper[T <: Data](
   n: Int = 1,
   multicycle: Int = 1,
   hasMbist: Boolean = false,
-  powerCtl: Boolean,
+  powerCtl: Boolean = false,
 )
   extends Module {
   val io = IO(new Bundle() {
