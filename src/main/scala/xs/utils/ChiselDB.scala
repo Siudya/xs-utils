@@ -1,18 +1,18 @@
 /***************************************************************************************
- * Copyright (c) 2020-2021 Institute of Computing Technology, Chinese Academy of Sciences
- * Copyright (c) 2020-2021 Peng Cheng Laboratory
- *
- * XiangShan is licensed under Mulan PSL v2.
- * You can use this software according to the terms and conditions of the Mulan PSL v2.
- * You may obtain a copy of Mulan PSL v2 at:
- *          http://license.coscl.org.cn/MulanPSL2
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the Mulan PSL v2 for more details.
- ***************************************************************************************/
+* Copyright (c) 2020-2021 Institute of Computing Technology, Chinese Academy of Sciences
+* Copyright (c) 2020-2021 Peng Cheng Laboratory
+*
+* XiangShan is licensed under Mulan PSL v2.
+* You can use this software according to the terms and conditions of the Mulan PSL v2.
+* You may obtain a copy of Mulan PSL v2 at:
+*          http://license.coscl.org.cn/MulanPSL2
+*
+* THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+* EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+* MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+*
+* See the Mulan PSL v2 for more details.
+***************************************************************************************/
 
 package xs.utils
 
@@ -89,7 +89,7 @@ class Table[T <: Record](val envInFPGA: Boolean, val tableName: String, val hw: 
          |  // create table
          |  if (!enable_dump_$tableName) return;
          |
-         |  char * sql = "CREATE TABLE $tableName(" \\
+         |  const char *sql = "CREATE TABLE $tableName(" \\
          |    "ID INTEGER PRIMARY KEY AUTOINCREMENT," \\
          |    ${cols.map(c => "\"" + c.toUpperCase + " INT NOT NULL,\" \\").mkString("", "\n    ", "")}
          |    "STAMP INT NOT NULL," \\
@@ -108,13 +108,13 @@ class Table[T <: Record](val envInFPGA: Boolean, val tableName: String, val hw: 
          |extern "C" void ${tableName}_write(
          |  ${cols.map(c => "uint64_t " + c).mkString("", ",\n  ", ",")}
          |  uint64_t stamp,
-         |  char * site
+         |  char *site
          |) {
          |  if(!dump || !enable_dump_$tableName) return;
          |
-         |  char * format = "INSERT INTO $tableName(${cols.map(_.toUpperCase).mkString(",")}, STAMP, SITE) " \\
-         |                  "VALUES(${cols.map(_ => "%ld").mkString(", ")}, %ld, '%s');";
-         |  char * sql = (char *)malloc(${cols.size + 1} * sizeof(uint64_t) + (strlen(format)+strlen(site)) * sizeof(char));
+         |  const char *format = "INSERT INTO $tableName(${cols.map(_.toUpperCase).mkString(",")}, STAMP, SITE) " \\
+         |                  "VALUES(${cols.map(_ => "%#lx").mkString(", ")}, %#lx, '%s');";
+         |  char *sql = (char *)malloc(${(cols.size + 1) * 2} * sizeof(uint64_t) + (strlen(format)+strlen(site)) * sizeof(char));
          |  sprintf(sql,
          |    format,
          |    ${cols.mkString(",")}, stamp, site
@@ -136,7 +136,7 @@ class Table[T <: Record](val envInFPGA: Boolean, val tableName: String, val hw: 
          |extern "C" void ${tableName}_write(
          |  ${cols.map(c => "uint64_t " + c).mkString("", ",\n  ", ",")}
          |  uint64_t stamp,
-         |  char * site
+         |  char *site
          |) {}
          |""".stripMargin
     if (envInFPGA) (init_dummy, insert_dummy) else (init, insert)
@@ -166,11 +166,11 @@ class Table[T <: Record](val envInFPGA: Boolean, val tableName: String, val hw: 
 }
 
 private class TableWriteHelper[T <: Record](tableName: String, hw: T, site: String)
-  extends BlackBox(
-    Map(
-      "site" -> StringParam(site)
+    extends BlackBox(
+      Map(
+        "site" -> StringParam(site)
+      )
     )
-  )
     with HasBlackBoxInline
     with HasTableUtils {
   val io = IO(new Bundle() {
@@ -205,10 +205,12 @@ private class TableWriteHelper[T <: Record](tableName: String, hw: T, site: Stri
        |${verilogModulePorts.mkString("  ", ",\n  ", ",")}
        |  input [63:0] stamp
        |);
-       |  parameter string site = "";
+       |  parameter string site = "undefined";
        |
        |  always@(posedge clock) begin
-       |    if(en && !reset) $dpicFunc(${table.map(_.vExpr).mkString("", ", ", ", stamp, site")});
+       |    if(en && !reset) begin
+       |      $dpicFunc(${table.map(_.vExpr).mkString("", ", ", ", stamp, site")});
+       |    end
        |  end
        |endmodule
        |""".stripMargin
@@ -229,10 +231,10 @@ object ChiselDB {
     this.enable = enable
   }
 
-  def createTable[T <: Record](tableName: String, hw: T, basicDB: Boolean = this.enable): Table[T] = {
+  def createTable[T <: Record](tableName: String, hw: T, basicDB: Boolean = false): Table[T] = {
     getTable(tableName, hw)
       .getOrElse({
-        val t = new Table[T](!basicDB, tableName, hw)
+        val t = new Table[T](!(basicDB & this.enable), tableName, hw)
         table_map += (tableName -> t)
         t
       })
@@ -267,7 +269,7 @@ object ChiselDB {
       |#include <sqlite3.h>
       |
       |void init_db(bool en, bool select_enable, const char *select_db);
-      |void save_db(const char * filename);
+      |void save_db(const char *filename);
       |
       |#endif
       |""".stripMargin
@@ -299,7 +301,7 @@ object ChiselDB {
     def select_enable_assign(str: String) =
       s"""
          |    {
-         |      char table_name[] = "$str";
+         |      const char *table_name = "$str";
          |      for (int idx = 0; idx < select_db_num; idx++) {
          |        char *str_p = select_db_list[idx];
          |        int s_idx = 0;
@@ -325,7 +327,7 @@ object ChiselDB {
        |
        |bool dump;
        |sqlite3 *mem_db;
-       |char * zErrMsg;
+       |char *zErrMsg;
        |int rc;
        |
        |${table_map.keys.map(t => "bool enable_dump_" + t + " = true;\n").mkString("","\n","\n")}

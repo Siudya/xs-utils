@@ -30,10 +30,9 @@ trait ConstantinParams {
   }
 }
 
-private class SignalReadHelper(constName: String) extends BlackBox with HasBlackBoxInline with ConstantinParams {
+private class SignalReadHelper(constName: String, initValue: BigInt)
+  extends BlackBox with HasBlackBoxInline with ConstantinParams {
   val io = IO(new Bundle{
-    //val clock = Input(Clock())
-    //val reset = Input(Reset())
     val value = Output(UInt(UIntWidth.W))
   })
 
@@ -42,13 +41,19 @@ private class SignalReadHelper(constName: String) extends BlackBox with HasBlack
 
   val verilog =
     s"""
+       |`ifndef SYNTHESIS
        |import "DPI-C" function longint $dpicFunc();
+       |`endif
        |
        |module $moduleName(
-       |  output [$UIntWidth - 1:0] value
+       |  output reg [$UIntWidth - 1:0] value
        |);
        |
-       |  assign value = $dpicFunc();
+       |`ifdef SYNTHESIS
+       |  initial value = $initValue;
+       |`else
+       |  initial value = $dpicFunc();
+       |`endif
        |endmodule
        |""".stripMargin
   setInline(s"$moduleName.v", verilog)
@@ -71,10 +76,8 @@ class MuxModule[A <: Record](gen: A, n: Int) extends Module {
 * */
 
 object Constantin extends ConstantinParams {
-  // store init value => just UInt
-  private val initMap = scala.collection.mutable.Map[String, UInt]()
-  // store read value => initRead: UInt | fileRead: Wire(UInt)
-  private val recordMap = scala.collection.mutable.Map[String, UInt]()
+  // store init value => BigInt
+  private val initMap = scala.collection.mutable.Map[String, BigInt]()
   private val objectName = "constantin"
   private var enable = true
 
@@ -82,27 +85,19 @@ object Constantin extends ConstantinParams {
     this.enable = enable
   }
 
-  def createRecord(constName: String, initValue: UInt = 0.U): UInt = {
-    initMap += (constName -> initValue)
+  def createRecord(constName: String, initValue: Boolean): Bool = {
+    createRecord(constName, if (initValue) 1 else 0)(0)
+  }
 
-    val t = WireInit(initValue.asTypeOf(UInt(UIntWidth.W)))
-    if (recordMap.contains(constName)) {
-      recordMap.getOrElse(constName, 0.U)
+  def createRecord(constName: String, initValue: BigInt = 0): UInt = {
+    initMap(constName) = initValue
+
+    if (!this.enable) {
+      println(s"Constantin initRead: $constName = $initValue")
+      initValue.U(UIntWidth.W)
     } else {
-      recordMap += (constName -> t)
-       if (!this.enable) {
-         println(s"Constantin initRead: ${constName} = ${initValue.litValue}")
-         recordMap.getOrElse(constName, 0.U)
-       } else {
-        val recordModule = Module(new SignalReadHelper(constName))
-        //recordModule.io.clock := Clock()
-        //recordModule.io.reset := Reset()
-        t := recordModule.io.value
-
-        // print record info
-        println(s"Constantin fileRead: ${constName} = ${initValue.litValue}")
-        t
-       }
+      println(s"Constantin fileRead: $constName = $initValue")
+      Module(new SignalReadHelper(constName, initValue)).suggestName(s"recordModule_$constName").io.value
     }
   }
 
@@ -116,10 +111,11 @@ object Constantin extends ConstantinParams {
   }
 
   def getInitCpp: String = {
-    val initStr = initMap.map({ a => s"""  constantinMap["${a._1}"] = ${a._2.litValue};\n""" }).foldLeft("")(_ + _)
+    val initStr = initMap.map({ a => s"""  constantinMap["${a._1}"] = ${a._2};\n""" }).foldLeft("")(_ + _)
     s"""
        |#include <map>
        |#include <string>
+       |#include <stdint.h>
        |using namespace std;
        |
        |map<string, uint64_t> constantinMap;
@@ -146,9 +142,14 @@ object Constantin extends ConstantinParams {
        |void constantinLoad() {
        |  constantinInit();
        |  uint64_t num;
-       |  string tmp;
-       |  string noop_home = getenv("NOOP_HOME");
-       |  tmp = noop_home + "/build/${objectName}.txt";
+       |  const char *noop_home = getenv("NOOP_HOME");
+       |#ifdef NOOP_HOME
+       |  if (!noop_home) {
+       |    noop_home = NOOP_HOME;
+       |  }
+       |#endif
+       |  string noop_home_s = noop_home;
+       |  string tmp = noop_home_s + "/build/${objectName}.txt";
        |  cf.open(tmp.c_str(), ios::in);
        |  if(cf.good()){
        |    while (cf >> tmp >> num) {
@@ -175,6 +176,7 @@ object Constantin extends ConstantinParams {
        |extern map<string, uint64_t> constantinMap;
        |
        |void constantinLoad() {
+       |  constantinInit();
        |  uint64_t num;
        |  string tmp;
        |  uint64_t total_num;
@@ -210,7 +212,7 @@ object Constantin extends ConstantinParams {
   }
 
   def getTXT: String = {
-    initMap.map({a => a._1 + s" ${a._2.litValue}\n"}).foldLeft("")(_ + _)
+    initMap.map({a => a._1 + s" ${a._2}\n"}).foldLeft("")(_ + _)
   }
 
   def addToFileRegisters = {
@@ -221,7 +223,7 @@ object Constantin extends ConstantinParams {
     } else {
       cppContext += getPreProcessCpp
     }
-    cppContext += recordMap.map({a => getCpp(a._1)}).foldLeft("")(_ + _)
+    cppContext += initMap.map({a => getCpp(a._1)}).foldLeft("")(_ + _)
     FileRegisters.add(s"${objectName}.cpp", cppContext)
     FileRegisters.add(s"${objectName}.txt", getTXT)
   }
