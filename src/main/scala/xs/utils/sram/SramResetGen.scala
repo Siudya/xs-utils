@@ -18,7 +18,8 @@ class SramResetGen(
   })
   private val resetCounter = RegInit((set - 1).U(setBits.W))
   private val resetState = RegInit(true.B)
-  private val resetHold = RegInit(Fill(resetDelay, true.B))
+  private val resetVal = ((0x1L << resetDelay) - 1).U(resetDelay.W)
+  private val resetHold = RegInit(resetVal)
   resetHold := Cat(0.U(1.W), resetHold(resetDelay - 1, 1))
   private val step = Wire(Bool())
   if(multicycle > 1) {
