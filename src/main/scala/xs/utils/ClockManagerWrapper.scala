@@ -21,7 +21,7 @@ class ClockManagerWrapper extends BlackBox with HasBlackBoxInline {
        |  input  wire [31:0] cfg_3,
        |  input  wire [31:0] cfg_4,
        |  input  wire [31:0] cfg_5,
-       |  input  wire [31:0] cfg_6
+       |  input  wire [31:0] cfg_6,
        |  input  wire [31:0] cfg_7,
        |  input  wire in_clock,
        |  output wire cpu_clock,
