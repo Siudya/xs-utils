@@ -35,11 +35,11 @@ class SramResetGen(
     step := upds(0)
   } else {
     io.wen := resetState && !resetHold(0)
-    step := resetState
+    step := io.wen
   }
   when(step) {
     resetCounter := Mux(resetCounter === 0.U, 0.U, resetCounter - 1.U)
-    resetState := resetCounter === 0.U
+    resetState := resetCounter =/= 0.U
   }
   io.resetState := resetState
   io.waddr := resetCounter
