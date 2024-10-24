@@ -197,17 +197,20 @@ object SramProto {
     depth: Int,
     width: Int,
     maskSegments: Int = 1,
-    MCP: Boolean = false,
+    setup: Int,
+    hold: Int,
+    latency: Int,
     writeClock: Option[Clock] = None,
     hasMbist: Boolean,
     suffix: String = "",
     powerCtl: Boolean
   ): (Instance[SramArray], String) = {
+    val mcpStr = s"s${setup}h${hold}l${latency}"
+    val pwStr = if(powerCtl) "_pwctl" else ""
     val mbist = if(hasMbist) "_bist" else ""
-    val mcpPrefix = if(MCP) "_multicycle" else ""
     val numPort = if(singlePort) 1 else 2
     val maskWidth = width / maskSegments
-    val sramName = Some(s"sram_array_${numPort}p${depth}x${width}m$maskWidth$mbist$mcpPrefix$suffix")
+    val sramName = Some(s"sram_array_${numPort}p${depth}x${width}m$maskWidth$mcpStr$pwStr$mbist$suffix")
     if(!defMap.contains(sramName.get)) {
       val sramDef = if(singlePort) {
         Definition(new SramArray1P(depth, width, maskSegments, hasMbist, sramName, powerCtl))
