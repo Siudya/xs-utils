@@ -62,7 +62,9 @@ object SramHelper {
     way: Int,
     set: Int,
     dp: Boolean,
-    mcp: Boolean,
+    setup: Int,
+    hold: Int,
+    latency: Int,
     bist: Boolean,
     pwctl: Option[SramPowerCtl],
     reset: Reset,
@@ -90,7 +92,7 @@ object SramHelper {
     val bitWrite = way != 1
     val sramMaskBits = if(isNto1) mbistNodeNum else way
 
-    val (array, vname) = SramProto(rclk, !dp, set, ew * way, sramMaskBits, mcp, wclk, bist, suffix, pwctl.isDefined)
+    val (array, vname) = SramProto(rclk, !dp, set, ew * way, sramMaskBits, setup, hold, latency, wclk, bist, suffix, pwctl.isDefined)
     val bdParam =
       Ram2MbistParams(
         set,
@@ -104,7 +106,7 @@ object SramHelper {
         bitWrite,
         foundry,
         sramInst,
-        0,
+        latency - 1,
         "None",
         template
       )
