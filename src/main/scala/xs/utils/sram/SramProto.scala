@@ -207,7 +207,8 @@ object SramProto {
     val mcpPrefix = if(MCP) "_multicycle" else ""
     val numPort = if(singlePort) 1 else 2
     val maskWidth = width / maskSegments
-    val sramName = Some(s"sram_array_${numPort}p${depth}x${width}m$maskWidth$mbist$mcpPrefix$suffix")
+    val pwctlStr = if(powerCtl) "_pwctl" else ""
+    val sramName = Some(s"sram_array_${numPort}p${depth}x${width}m$maskWidth$pwctlStr$mbist$mcpPrefix$suffix")
     if(!defMap.contains(sramName.get)) {
       val sramDef = if(singlePort) {
         Definition(new SramArray1P(depth, width, maskSegments, hasMbist, sramName, powerCtl))
