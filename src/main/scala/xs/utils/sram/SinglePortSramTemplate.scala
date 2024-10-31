@@ -28,6 +28,7 @@ class SinglePortSramTemplate[T <: Data](
   powerCtl: Boolean = false,
 ) extends Module {
   private val interval = if(extraHold) setup + 1 else setup
+  require(latency <= interval)
   val io = IO(new Bundle{
     val req = Flipped(Decoupled(new SpSramReq(gen, set, way)))
     val resp = Valid(new SpSramResp(gen, way))
