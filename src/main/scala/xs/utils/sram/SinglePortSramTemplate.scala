@@ -27,8 +27,7 @@ class SinglePortSramTemplate[T <: Data](
   suffix: String = "",
   powerCtl: Boolean = false,
 ) extends Module {
-  private val interval = if(extraHold) setup + 1 else setup
-  require(latency <= interval)
+  private val hold = if(extraHold) setup + 1 else setup
   val io = IO(new Bundle{
     val req = Flipped(Decoupled(new SpSramReq(gen, set, way)))
     val resp = Valid(new SpSramResp(gen, way))
@@ -54,13 +53,21 @@ class SinglePortSramTemplate[T <: Data](
   io.resp.valid := ram.io.r.resp.valid
   io.resp.bits.data := ram.io.r.resp.data
 
-  private val reqReg = if(interval > 1) RegEnable(io.req.bits, io.req.fire) else io.req.bits
   ram.io.r.req.valid := io.req.fire && !io.req.bits.write
   ram.io.w.req.valid := io.req.fire && io.req.bits.write
   io.req.ready := ram.io.w.req.ready
 
-  ram.io.r.req.bits.setIdx := reqReg.addr
-  ram.io.w.req.bits.data := reqReg.data
-  ram.io.w.req.bits.setIdx := reqReg.addr
-  ram.io.w.req.bits.waymask.foreach(_ := reqReg.mask.get)
+  private val addr = if(hold > 1) RegEnable(io.req.bits.addr, io.req.fire) else io.req.bits.addr
+  private val data = if(hold > 1) RegEnable(io.req.bits.data, io.req.fire && io.req.bits.write) else io.req.bits.data
+  private val mask = io.req.bits.mask.map(m => {
+    if(hold > 1) {
+      RegEnable(m, io.req.fire && io.req.bits.write)
+    } else {
+      m
+    }
+  })
+  ram.io.r.req.bits.setIdx := addr
+  ram.io.w.req.bits.setIdx := addr
+  ram.io.w.req.bits.data := data
+  ram.io.w.req.bits.waymask.foreach(_ := mask.get)
 }

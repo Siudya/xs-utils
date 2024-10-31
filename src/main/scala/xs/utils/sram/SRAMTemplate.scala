@@ -279,9 +279,16 @@ class SRAMTemplate[T <: Data](
   private val selectOHReg = RegEnable(mbistBd.selectedOH, respReg(0))
   mbistBd.rdata := Mux1H(selectOHReg, rdataReg.asTypeOf(Vec(nodeNum, UInt((dataWidth / nodeNum).W))))
 
+  private val interval = latency.max(hold)
+  private val intervalCounter = RegInit(0.U(log2Ceil(interval + 1).W))
+  when(ramRen || ramWen) {
+    intervalCounter := (interval - 1).U
+  }.elsewhen(intervalCounter.orR) {
+    intervalCounter := intervalCounter - 1.U
+  }
+
   private val singleHold = if(singlePort) io.w.req.valid else false.B
-  private val mcpHold = if(inputMcp) rbusy | wbusy else false.B
   private val resetHold = if(shouldReset) resetState else false.B
-  io.r.req.ready := !mcpHold && !resetHold && !singleHold
-  io.w.req.ready := !mcpHold && !resetHold
+  io.r.req.ready := intervalCounter === 0.U && !resetHold && !singleHold
+  io.w.req.ready := intervalCounter === 0.U && !resetHold
 }
