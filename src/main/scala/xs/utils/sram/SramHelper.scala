@@ -14,7 +14,7 @@ object SramHelper {
   private var nodeId = 0
   private var wrapperId = 0
   private var domainId = 0
-  private val broadCastBdQueue = new mutable.Queue[SramBroadcastBundle]
+  val broadCastBdQueue = new mutable.Queue[SramBroadcastBundle]
 
   private def getWayNumForEachNodeAndNodeNum_1toN(dw: Int, way: Int, mw: Int): (Int, Int) = {
     val dataNum1toNNode = mw / dw
@@ -66,6 +66,7 @@ object SramHelper {
     hold: Int,
     latency: Int,
     bist: Boolean,
+    broadcast: Option[SramBroadcastBundle],
     pwctl: Option[SramPowerCtl],
     reset: Reset,
     rclk: Clock,
@@ -74,7 +75,7 @@ object SramHelper {
     foundry: String,
     sramInst: String,
     template: RawModule
-  ): (Ram2Mbist, SramBroadcastBundle, Instance[SramArray], Int, Int, String) = {
+  ): (Ram2Mbist, Instance[SramArray], Int, Int, String) = {
     val isNto1 = ew > maxMbistDataWidth
     //** ******implement mbist interface node(multiple nodes for one way)******
     val (mbistNodeNumForEachWay, mbistNodeNumNto1) = getNodeNumForEachWayAndNodeNum_Nto1(ew, way, maxMbistDataWidth)
@@ -92,7 +93,7 @@ object SramHelper {
     val bitWrite = way != 1
     val sramMaskBits = if(isNto1) mbistNodeNum else way
 
-    val (array, vname) = SramProto(rclk, !dp, set, ew * way, sramMaskBits, setup, hold, latency, wclk, bist, suffix, pwctl.isDefined)
+    val (array, vname) = SramProto(rclk, !dp, set, ew * way, sramMaskBits, setup, hold, latency, wclk, bist || broadcast.isDefined, suffix, pwctl.isDefined)
     val bdParam =
       Ram2MbistParams(
         set,
@@ -117,27 +118,21 @@ object SramHelper {
     mbist.we := false.B
     mbist.re := false.B
     mbist.wmask := Fill(mbistMaskWidth, true.B)
-    val broadCastSignals = Wire(new SramBroadcastBundle)
-    broadCastSignals := DontCare
+    if(broadcast.isDefined || bist) {
+      array.mbist.get.dft_ram_bp_clken := broadcast.get.ram_bp_clken
+      array.mbist.get.dft_ram_bypass := broadcast.get.ram_bypass
+    }
     if(bist) {
       dontTouch(mbist)
       Mbist.addRamNode(mbist, mbistArrayIds)
       val addId = if(isNto1) mbistNodeNumNto1 else mbistNodeNum1toN
       nodeId += addId
       increaseDomainID(addId)
-      val broadcast = IO(new SramBroadcastBundle)
-      broadcast := DontCare
-      dontTouch(broadcast)
-      broadcast.suggestName("broadcast")
-      broadCastSignals := broadcast
-      broadCastBdQueue.enqueue(broadcast)
-      array.mbist.get.dft_ram_bp_clken := broadcast.ram_bp_clken
-      array.mbist.get.dft_ram_bypass := broadcast.ram_bypass
     }
     if(pwctl.isDefined) {
       array.pwctl.get.ret := pwctl.get.ret
       array.pwctl.get.stop := pwctl.get.stop | reset.asBool
     }
-    (mbist, broadCastSignals, array, mbistNodeNum, sramMaskBits, vname)
+    (mbist, array, mbistNodeNum, sramMaskBits, vname)
   }
 }

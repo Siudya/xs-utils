@@ -9,7 +9,7 @@ idea:
 
 rtl:
 	@mkdir -p build
-	mill -i xsutils.test.runMain TestTop --full-stacktrace -td build --target systemverilog --module $(MOD) | tee build/make.log
+	mill -i xsutils.test.runMain TestTop --full-stacktrace -td build --target systemverilog --split-verilog --module $(MOD) | tee build/make.log
 
 clean:
 	@rm -rf build/*

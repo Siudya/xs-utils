@@ -3,18 +3,13 @@ package xs.utils.sram
 import chisel3._
 import chisel3.util._
 
-class SpSramReq[T <: Data](gen: T, set:Int, way:Int) extends Bundle {
+class DpSramWrite[T <: Data](gen: T, set:Int, way:Int) extends Bundle {
   val addr = UInt(log2Ceil(set).W)
   val mask = if(way == 1) None else Some(UInt(way.W))
-  val write = Bool()
   val data = Vec(way, gen)
 }
 
-class SpSramResp[T <: Data](gen: T, way:Int) extends Bundle {
-  val data = Vec(way, gen)
-}
-
-class SinglePortSramTemplate[T <: Data](
+class DualPortSramTemplate[T <: Data](
   gen: T,
   set: Int,
   way: Int = 1,
@@ -29,15 +24,16 @@ class SinglePortSramTemplate[T <: Data](
 ) extends Module {
   private val hold = if(extraHold) setup + 1 else setup
   val io = IO(new Bundle{
-    val req = Flipped(Decoupled(new SpSramReq(gen, set, way)))
-    val resp = Valid(new SpSramResp(gen, way))
+    val wreq = Flipped(Decoupled(new DpSramWrite(gen, set, way)))
+    val rreq = Flipped(Decoupled(UInt(log2Ceil(set).W)))
+    val rresp = Valid(Vec(way, gen))
     val pwctl = if(powerCtl) Some(new SramPowerCtl) else None
   })
   private val ram = Module(new SRAMTemplate(
     gen = gen,
     set = set,
     way = way,
-    singlePort = true,
+    singlePort = false,
     shouldReset = shouldReset,
     extraReset = false,
     holdRead = holdRead,
@@ -51,24 +47,18 @@ class SinglePortSramTemplate[T <: Data](
     powerCtl = powerCtl
   ))
   ram.io.pwctl.foreach(_ := io.pwctl.get)
-  io.resp.valid := ram.io.r.resp.valid
-  io.resp.bits.data := ram.io.r.resp.data
+  io.rresp.valid := ram.io.r.resp.valid
+  io.rresp.bits := ram.io.r.resp.data
 
-  ram.io.r.req.valid := io.req.fire && !io.req.bits.write
-  ram.io.w.req.valid := io.req.fire && io.req.bits.write
-  io.req.ready := ram.io.w.req.ready
+  ram.io.r.req.valid := io.wreq.valid
+  ram.io.w.req.valid := io.wreq.valid
+  io.wreq.ready := ram.io.w.req.ready
+  io.rreq.ready := ram.io.r.req.ready
 
-  private val addr = if(hold > 1) RegEnable(io.req.bits.addr, io.req.fire) else io.req.bits.addr
-  private val data = if(hold > 1) RegEnable(io.req.bits.data, io.req.fire && io.req.bits.write) else io.req.bits.data
-  private val mask = io.req.bits.mask.map(m => {
-    if(hold > 1) {
-      RegEnable(m, io.req.fire && io.req.bits.write)
-    } else {
-      m
-    }
-  })
-  ram.io.r.req.bits.setIdx := addr
-  ram.io.w.req.bits.setIdx := addr
-  ram.io.w.req.bits.data := data
-  ram.io.w.req.bits.waymask.foreach(_ := mask.get)
+  private val wreq = if(hold > 1) RegEnable(io.wreq.bits, io.wreq.fire) else io.wreq.bits
+  private val rreq = if(hold > 1) RegEnable(io.rreq.bits, io.rreq.fire) else io.rreq.bits
+  ram.io.r.req.bits.setIdx := rreq
+  ram.io.w.req.bits.setIdx := wreq.addr
+  ram.io.w.req.bits.data := wreq.data
+  ram.io.w.req.bits.waymask.foreach(_ := wreq.mask.get)
 }
