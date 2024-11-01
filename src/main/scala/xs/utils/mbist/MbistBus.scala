@@ -20,7 +20,7 @@ package xs.utils.mbist
 import chisel3._
 import chisel3.util._
 import chisel3.util.experimental.BoringUtils
-import xs.utils.sram.SRAMTemplate
+import xs.utils.sram.{SRAMTemplate, SramInfo}
 
 trait MbistBundleLike {
   this: Bundle =>
@@ -81,35 +81,32 @@ class MbistBus(val params: MbistBusParams) extends MbistCommonBundle() {
 }
 
 case class Ram2MbistParams(
+  sramParams: SramInfo,
   set:        Int,
-  dataWidth:  Int,
-  maskWidth:  Int,
   singlePort: Boolean,
   vname:      String,
   nodeSuffix: String,
-  nodeNum:    Int,
-  maxArrayId: Int,
-  bitWrite:   Boolean,
   foundry:    String,
   sramInst:   String,
   latency:    Int = 0,
   bankRange:  String = "None",
   holder:     RawModule) {
+  val dataWidth = sramParams.mbistDataWidth
+  val maskWidth = sramParams.mbistMaskWidth
+  val maxArrayId = sramParams.mbistArrayIds.max
+  val nodeNum = sramParams.mbistNodeNum
+  val bitWrite = sramParams.bitWrite
   val addrWidth = log2Up(set + 1)
   val arrayWidth = log2Up(maxArrayId + 1)
 
   def getAllNodesParams(): Seq[Ram2MbistParams] = {
     val res = Seq.tabulate(nodeNum)(idx => {
       Ram2MbistParams(
+        sramParams,
         set,
-        dataWidth,
-        maskWidth,
         singlePort,
         vname,
         nodeSuffix + s"_node$idx",
-        nodeNum,
-        maxArrayId,
-        bitWrite,
         foundry,
         sramInst,
         latency,
@@ -126,7 +123,6 @@ class Ram2Mbist(val params: Ram2MbistParams) extends MbistCommonBundle() {
   val wdata = Input(UInt(params.dataWidth.W))
   val wmask = Input(UInt(params.maskWidth.W))
   val re, we = Input(Bool())
-  val ere, ewe = Input(Bool())
   val rdata = Output(UInt(params.dataWidth.W))
   val ack = Input(Bool())
   val selectedOH = Input(UInt(params.nodeNum.W))
@@ -139,8 +135,6 @@ class Ram2Mbist(val params: Ram2MbistParams) extends MbistCommonBundle() {
     "wmask",
     "re",
     "we",
-    "ere",
-    "ewe",
     "ack",
     "selectedOH",
     "array"

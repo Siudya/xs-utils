@@ -6,9 +6,60 @@ import chisel3.util._
 import chisel3.util.experimental.BoringUtils
 import xs.utils.mbist.Mbist._
 import xs.utils.mbist.{Mbist, Ram2Mbist, Ram2MbistParams}
+import xs.utils.sram.SramHelper._
 
 import scala.collection.mutable
 import scala.math.sqrt
+
+case class SramInfo (
+  dataBits:Int,
+  way:Int,
+  bist:Boolean
+) {
+  private val ew = dataBits
+  private lazy val isNto1 = ew > maxMbistDataWidth
+  //** ******implement mbist interface node(multiple nodes for one way)******
+  private lazy val (mbistNodeNumForEachWay, mbistNodeNumNto1) = getNodeNumForEachWayAndNodeNum_Nto1(ew, way, maxMbistDataWidth)
+  private lazy val maskWidthNto1 = 1
+  private lazy val mbistDataWidthNto1 = (ew + mbistNodeNumForEachWay - 1) / mbistNodeNumForEachWay
+  //** *******implement mbist interface node(one node for multiple ways)******
+  private lazy val (wayNumForEachNode, mbistNodeNum1toN) = getWayNumForEachNodeAndNodeNum_1toN(ew, way, maxMbistDataWidth)
+  private lazy val mbistDataWidth1toN = wayNumForEachNode * ew
+  private lazy val maskWidth1toN = wayNumForEachNode
+
+  lazy val mbistNodeNum = if(isNto1) mbistNodeNumNto1 else mbistNodeNum1toN
+  lazy val mbistDataWidth = if(isNto1) mbistDataWidthNto1 else mbistDataWidth1toN
+  lazy val mbistMaskWidth = if(isNto1) maskWidthNto1 else maskWidth1toN
+  lazy val mbistArrayIds = if(bist) Seq.tabulate(mbistNodeNum)(idx => getDomainID + idx) else Seq.fill(mbistNodeNum)(0)
+  lazy val bitWrite = way != 1
+  lazy val sramMaskBits = if(isNto1) mbistNodeNum else way
+  lazy val sramDataBits = way * dataBits
+  lazy val sramSegBits = sramDataBits / sramMaskBits
+  if(bist) {
+    val addId = if(isNto1) mbistNodeNumNto1 else mbistNodeNum1toN
+    increaseNodeID(addId)
+    increaseDomainID(addId)
+  }
+  def mbistMaskConverse(wmask:UInt, nodeSelectOH:UInt):UInt = {
+    val fullMask = if(way > 1) Fill(mbistNodeNum, wmask) else Fill(mbistNodeNum, true.B)
+    if(isNto1) {
+      nodeSelectOH & fullMask
+    } else {
+      val n = sramMaskBits / mbistNodeNum
+      val selMask = Cat(Seq.tabulate(sramMaskBits)(i => nodeSelectOH(i / n)).reverse)
+      selMask & fullMask
+    }
+  }
+
+  def funcMaskConverse(mask:UInt): UInt = {
+    if(isNto1) {
+      val n = sramMaskBits / way
+      Cat(Seq.tabulate(sramMaskBits)(i => mask(i / n)).reverse)
+    } else {
+      mask
+    }
+  }
+}
 
 object SramHelper {
   private var nodeId = 0
@@ -16,7 +67,7 @@ object SramHelper {
   private var domainId = 0
   val broadCastBdQueue = new mutable.Queue[SramBroadcastBundle]
 
-  private def getWayNumForEachNodeAndNodeNum_1toN(dw: Int, way: Int, mw: Int): (Int, Int) = {
+  def getWayNumForEachNodeAndNodeNum_1toN(dw: Int, way: Int, mw: Int): (Int, Int) = {
     val dataNum1toNNode = mw / dw
     val numVec = (1 to dataNum1toNNode)
     val validVec = numVec.map(num => (way % num == 0) && (way >= num))
@@ -32,7 +83,7 @@ object SramHelper {
     divisors
   }
 
-  private def getNodeNumForEachWayAndNodeNum_Nto1(dw: Int, way: Int, mw: Int): (Int, Int) = {
+  def getNodeNumForEachWayAndNodeNum_Nto1(dw: Int, way: Int, mw: Int): (Int, Int) = {
     val divisors = getDivisor(dw)
     val validDivisors = divisors.filter(_ <= mw)
     val goodNodeNumForEachWay = dw / validDivisors.max
@@ -48,6 +99,8 @@ object SramHelper {
 
   def increaseDomainID(add: Int): Unit = domainId += add
 
+  def increaseNodeID(add: Int): Unit = nodeId += add
+
   def genBroadCastBundleTop(): SramBroadcastBundle = {
     val res = Wire(new SramBroadcastBundle)
     broadCastBdQueue.toSeq.foreach(bd => {
@@ -58,8 +111,7 @@ object SramHelper {
   }
 
   def genRam(
-    ew: Int,
-    way: Int,
+    sp: SramInfo,
     set: Int,
     dp: Boolean,
     setup: Int,
@@ -75,36 +127,16 @@ object SramHelper {
     foundry: String,
     sramInst: String,
     template: RawModule
-  ): (Ram2Mbist, Instance[SramArray], Int, Int, String) = {
-    val isNto1 = ew > maxMbistDataWidth
-    //** ******implement mbist interface node(multiple nodes for one way)******
-    val (mbistNodeNumForEachWay, mbistNodeNumNto1) = getNodeNumForEachWayAndNodeNum_Nto1(ew, way, maxMbistDataWidth)
-    val maskWidthNto1 = 1
-    val mbistDataWidthNto1 = (ew + mbistNodeNumForEachWay - 1) / mbistNodeNumForEachWay
-    //** *******implement mbist interface node(one node for multiple ways)******
-    val (wayNumForEachNode, mbistNodeNum1toN) = getWayNumForEachNodeAndNodeNum_1toN(ew, way, maxMbistDataWidth)
-    val mbistDataWidth1toN = wayNumForEachNode * ew
-    val maskWidth1toN = wayNumForEachNode
+  ): (Ram2Mbist, Instance[SramArray], String) = {
 
-    val mbistNodeNum = if(isNto1) mbistNodeNumNto1 else mbistNodeNum1toN
-    val mbistDataWidth = if(isNto1) mbistDataWidthNto1 else mbistDataWidth1toN
-    val mbistMaskWidth = if(isNto1) maskWidthNto1 else maskWidth1toN
-    val mbistArrayIds = Seq.tabulate(mbistNodeNum)(idx => getDomainID + idx)
-    val bitWrite = way != 1
-    val sramMaskBits = if(isNto1) mbistNodeNum else way
 
-    val (array, vname) = SramProto(rclk, !dp, set, ew * way, sramMaskBits, setup, hold, latency, wclk, bist || broadcast.isDefined, suffix, pwctl.isDefined)
-    val bdParam =
-      Ram2MbistParams(
+    val (array, vname) = SramProto(rclk, !dp, set, sp.sramDataBits, sp.sramMaskBits, setup, hold, latency, wclk, bist || broadcast.isDefined, suffix, pwctl.isDefined)
+    val bdParam = Ram2MbistParams(
+        sp,
         set,
-        mbistDataWidth,
-        mbistMaskWidth,
         !dp,
         vname,
         "",
-        mbistNodeNum,
-        mbistArrayIds.max,
-        bitWrite,
         foundry,
         sramInst,
         latency - 1,
@@ -117,22 +149,22 @@ object SramHelper {
     mbist.ack := false.B
     mbist.we := false.B
     mbist.re := false.B
-    mbist.wmask := Fill(mbistMaskWidth, true.B)
+    mbist.wmask := Fill(sp.mbistMaskWidth, true.B)
     if(broadcast.isDefined || bist) {
       array.mbist.get.dft_ram_bp_clken := broadcast.get.ram_bp_clken
       array.mbist.get.dft_ram_bypass := broadcast.get.ram_bypass
     }
     if(bist) {
       dontTouch(mbist)
-      Mbist.addRamNode(mbist, mbistArrayIds)
-      val addId = if(isNto1) mbistNodeNumNto1 else mbistNodeNum1toN
-      nodeId += addId
-      increaseDomainID(addId)
+      broadcast.get := DontCare
+      dontTouch(broadcast.get)
+      SramHelper.broadCastBdQueue.enqueue(broadcast.get)
+      Mbist.addRamNode(mbist, sp.mbistArrayIds)
     }
     if(pwctl.isDefined) {
       array.pwctl.get.ret := pwctl.get.ret
       array.pwctl.get.stop := pwctl.get.stop | reset.asBool
     }
-    (mbist, array, mbistNodeNum, sramMaskBits, vname)
+    (mbist, array, vname)
   }
 }

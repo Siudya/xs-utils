@@ -123,8 +123,6 @@ object Mbist {
         boreChildrenBd.selectedOH := childBd.selectedOH
         boreChildrenBd.array := childBd.array
         boreChildrenBd.ack := childBd.ack
-        boreChildrenBd.ere := childBd.ere
-        boreChildrenBd.ewe := childBd.ewe
         childBd.rdata := boreChildrenBd.rdata
         new SramNode(childBd, ram.array_id)
       case pl: PipelineBaseNode =>
