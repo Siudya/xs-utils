@@ -204,12 +204,13 @@ class SRAMTemplate[T <: Data](
   private val (ckRen, renStretched) = if(inputMcp) {
     val rreqReg = RegInit(0.U(hold.W))
     rreqReg.suggestName("rreqReg")
+    val rstate = Cat(false.B, rreqReg)
     when(ramRen) {
       rreqReg := Fill(rreqReg.getWidth, true.B)
     }.otherwise {
-      rreqReg := Cat(false.B, rreqReg) >> 1.U
+      rreqReg := rstate >> 1.U
     }
-    val cgEn = if(extraHold) rreqReg(1) else rreqReg(0)
+    val cgEn = if(extraHold) rstate(2, 1) === "b01".U else rstate(1, 0) === "b01".U
     val ramEn = rreqReg(0)
     (cgEn, ramEn)
   } else {
@@ -219,12 +220,13 @@ class SRAMTemplate[T <: Data](
   private val (ckWen, wenStretched) = if(inputMcp) {
     val wreqReg = RegInit(0.U(hold.W))
     wreqReg.suggestName("wreqReg")
+    val wstate = Cat(false.B, wreqReg)
     when(ramWen) {
       wreqReg := Fill(wreqReg.getWidth, true.B)
     }.otherwise {
-      wreqReg := Cat(false.B, wreqReg) >> 1.U
+      wreqReg := wstate >> 1.U
     }
-    val cgEn = if(extraHold) wreqReg(1) else wreqReg(0)
+    val cgEn = if(extraHold) wstate(2, 1) === "b01".U else wstate(1, 0) === "b01".U
     val ramEn = wreqReg(0)
     (cgEn, ramEn)
   } else {
