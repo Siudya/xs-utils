@@ -152,8 +152,6 @@ object MbistPipeline {
             b.bd.ack := a.ack
             b.bd.selectedOH := a.selectedOH
             b.bd.array := a.array
-            b.bd.ere := a.ere
-            b.bd.ewe := a.ewe
             a.rdata := b.bd.rdata
         })
       Some(res)
@@ -169,7 +167,7 @@ class MbistPipeline(level: Int, moduleName: String = s"MbistPipeline_${uniqueId}
 
   def registerCSV(intf: InterfaceInfo, csvName: String): Unit = {
     val gen = new MbistCsvGen(intf, this, csvName)
-    FileRegisters.add("xs/utils/mbist", s"$csvName.csv", gen.generate)
+    FileRegisters.add("mbist", s"$csvName.csv", gen.generate)
   }
 
   if(Mbist.isMaxLevel(level)) {
@@ -190,11 +188,9 @@ class MbistPipeline(level: Int, moduleName: String = s"MbistPipeline_${uniqueId}
   toNextPipeline.foreach(b => dontTouch(b))
   toSRAM.foreach(b => dontTouch(b))
 
-  private val ere = mbist.mbist_readen
-  private val ewe = mbist.mbist_writeen
   private val arrayHit = myNode.array_id.map(_.U === mbist.mbist_array).reduce(_ | _)
   private val activated = mbist.mbist_all | (mbist.mbist_req & arrayHit)
-  private val dataValid = activated & (ere | ewe)
+  private val dataValid = activated & (mbist.mbist_readen | mbist.mbist_writeen)
 
   private val pipelineNodesAck =
     if(pipelineNodes.nonEmpty) toNextPipeline.map(_.mbist_ack).reduce(_ | _) else true.B
@@ -234,8 +230,6 @@ class MbistPipeline(level: Int, moduleName: String = s"MbistPipeline_${uniqueId}
         bd.we := Mux(doSpread, wenReg, 0.U)
         bd.wmask := beReg(child.bd.params.maskWidth - 1, 0)
         bd.ack := reqReg
-        bd.ere := ere
-        bd.ewe := ewe
         bd.selectedOH := Fill(selectedVec.length, allReg) | Mux(
           reqReg(0).asBool,
           Cat(selectedVec.reverse),

@@ -96,18 +96,19 @@ class SRAMTemplate[T <: Data](
   latency: Int = 1, // ask your leader to changed this
   extraHold: Boolean = false,  //ask your leader to changed this
   hasMbist: Boolean = false,
-  hasBroadCast:Boolean = false,
+  explictBist:Boolean = false,
   suffix: String = "",
   powerCtl: Boolean = false,
   val foundry: String = "Unknown",
   val sramInst: String = "STANDARD")
   extends Module {
   private val inputMcp = setup > 1 || extraHold
+  val sp = SramInfo(gen.getWidth, way, hasMbist)
   val io = IO(new Bundle {
     val r = Flipped(new SRAMReadBus(gen, set, way))
     val w = Flipped(new SRAMWriteBus(gen, set, way))
     val pwctl = if(powerCtl) Some(new SramPowerCtl) else None
-    val broadcast = if(hasBroadCast || hasMbist) Some(new SramBroadcastBundle) else None
+    val broadcast = if(explictBist || hasMbist) Some(new SramBroadcastBundle) else None
   })
   require(latency >= 1)
   require(setup >= 1)
@@ -116,9 +117,10 @@ class SRAMTemplate[T <: Data](
   private val rcg = Module(new MbistClockGateCell(hold > 1))
   private val wcg = if(!singlePort) Some(Module(new MbistClockGateCell(hold > 1))) else None
   private val dataWidth = gen.getWidth * way
-  private val (mbistBd, array, nodeNum, realMaskBits, vname) = SramHelper.genRam(
-    gen.getWidth,
-    way,
+  private val nodeNum = sp.mbistNodeNum
+  private val realMaskBits = sp.sramMaskBits
+  private val (mbistBd, array, vname) = SramHelper.genRam(
+    sp,
     set,
     !singlePort,
     setup,
@@ -135,11 +137,6 @@ class SRAMTemplate[T <: Data](
     sramInst,
     this
   )
-  io.broadcast.foreach { bd =>
-    bd := DontCare
-    dontTouch(bd)
-    SramHelper.broadCastBdQueue.enqueue(bd)
-  }
   private val brcBd = io.broadcast.getOrElse(0.U.asTypeOf(new SramBroadcastBundle))
   val sramName: String = vname
   if(extraReset) require(shouldReset)
@@ -178,22 +175,8 @@ class SRAMTemplate[T <: Data](
     waddr
   }
 
-  private val nto1 = realMaskBits > way
-  private val fullMbistMask = if(way > 1) Fill(nodeNum, mbistBd.wmask) else Fill(realMaskBits, true.B)
-  private val mbistWmask = if(nto1) {
-    mbistBd.selectedOH & fullMbistMask
-  } else {
-    val n = realMaskBits / nodeNum
-    val selMask = Cat(Seq.tabulate(realMaskBits)(i => mbistBd.selectedOH(i / n)).reverse)
-    selMask & fullMbistMask
-  }
-
-  private val funcWmask = if(nto1) {
-    val n = realMaskBits / way
-    Cat(Seq.tabulate(realMaskBits)(i => wmask(i / n)).reverse)
-  } else {
-    wmask
-  }
+  private val mbistWmask = sp.mbistMaskConverse(mbistBd.wmask, mbistBd.selectedOH)
+  private val funcWmask = sp.funcMaskConverse(wmask)
 
   private val mbistWdata = Fill(nodeNum, mbistBd.wdata)
   private val ramWmask = if(hasMbist) Mux(mbistBd.ack, mbistWmask, funcWmask) else funcWmask
