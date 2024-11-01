@@ -50,10 +50,10 @@ class DualPortSramTemplate[T <: Data](
   io.rresp.valid := ram.io.r.resp.valid
   io.rresp.bits := ram.io.r.resp.data
 
-  ram.io.r.req.valid := io.wreq.valid
+  ram.io.r.req.valid := io.rreq.valid
   ram.io.w.req.valid := io.wreq.valid
-  io.wreq.ready := ram.io.w.req.ready
   io.rreq.ready := ram.io.r.req.ready
+  io.wreq.ready := ram.io.w.req.ready
 
   private val wreq = if(hold > 1) RegEnable(io.wreq.bits, io.wreq.fire) else io.wreq.bits
   private val rreq = if(hold > 1) RegEnable(io.rreq.bits, io.rreq.fire) else io.rreq.bits
