@@ -235,7 +235,7 @@ class SRAMTemplate[T <: Data](
 
   private val respReg = RegInit(0.U(latency.W))
   when(ckRen) {
-    respReg := Fill(latency, true.B)
+    respReg := (1 << (latency - 1)).U
   }.otherwise {
     respReg := Cat(false.B, respReg) >> 1.U
   }
